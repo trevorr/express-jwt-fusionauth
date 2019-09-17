@@ -1,6 +1,7 @@
 # express-jwt-fusionauth
 
-[![npm version](https://badge.fury.io/js/express-jwt-fusionauth.svg)](https://badge.fury.io/js/express-jwt-fusionauth)
+[![npm](https://img.shields.io/npm/v/express-jwt-fusionauth)](https://www.npmjs.com/package/express-jwt-fusionauth)
+[![CircleCI](https://img.shields.io/circleci/build/github/trevorr/express-jwt-fusionauth)](https://circleci.com/gh/trevorr/express-jwt-fusionauth)
 
 [Express](https://expressjs.com/) middleware for JSON Web Token ([JWT](https://jwt.io/))-based
 authentication against [FusionAuth](https://fusionauth.io/). It provides three main functions:
