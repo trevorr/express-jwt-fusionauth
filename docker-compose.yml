@@ -20,7 +20,9 @@ services:
     environment:
       - cluster.name=fusionauth
       - bootstrap.memory_lock=true
-      - bootstrap.system_call_filter=false
+      - discovery.type=single-node
+      - http.host=0.0.0.0
+      - transport.host=127.0.0.1
       - "ES_JAVA_OPTS=${ES_JAVA_OPTS}"
     ports:
       - 9200:9200
