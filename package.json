@@ -4,6 +4,9 @@
   "description": "Express middleware for JWT-based authentication against FusionAuth",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc --declaration --project src",
     "docs": "jsdoc2md --configure jsdoc2md.json --heading-depth 3 -t jsdoc2md/README.md.hbs src/index.ts > README.md",
