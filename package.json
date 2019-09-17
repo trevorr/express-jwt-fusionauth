@@ -1,0 +1,60 @@
+{
+  "name": "express-jwt-fusionauth",
+  "version": "1.0.0",
+  "description": "Express middleware for JWT-based authentication against FusionAuth",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --declaration --project src",
+    "docs": "jsdoc2md --configure jsdoc2md.json --heading-depth 3 -t jsdoc2md/README.md.hbs src/index.ts > README.md",
+    "lint": "eslint 'src/**/*.ts'",
+    "test": "mocha -r ts-node/register --exit test/**/*.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/trevorr/express-jwt-fusionauth.git"
+  },
+  "keywords": [
+    "express",
+    "jwt",
+    "oauth",
+    "fusionauth"
+  ],
+  "author": "Trevor Robinson",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/trevorr/express-jwt-fusionauth/issues"
+  },
+  "homepage": "https://github.com/trevorr/express-jwt-fusionauth#readme",
+  "dependencies": {
+    "@panva/jose": "^1.9.1",
+    "axios": "^0.19.0",
+    "debug": "^4.1.1",
+    "express": "^4.17.1",
+    "qs": "^6.8.0"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.6.0",
+    "@babel/core": "^7.6.0",
+    "@babel/preset-env": "^7.6.0",
+    "@babel/preset-typescript": "^7.6.0",
+    "@types/chai": "^4.2.0",
+    "@types/cookie-parser": "^1.4.2",
+    "@types/express": "^4.17.1",
+    "@types/mocha": "^5.2.7",
+    "@types/node": "^12.7.2",
+    "@types/qs": "^6.5.3",
+    "@typescript-eslint/eslint-plugin": "^1.13.0",
+    "@typescript-eslint/parser": "^1.13.0",
+    "chai": "^4.2.0",
+    "cookie-parser": "^1.4.4",
+    "eslint": "^6.2.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "jsdoc-babel": "^0.5.0",
+    "jsdoc-to-markdown": "^5.0.1",
+    "mocha": "^6.2.0",
+    "nodemon": "^1.19.1",
+    "ts-node": "^8.3.0",
+    "typescript": "^3.6.3"
+  }
+}
