@@ -9,9 +9,10 @@
   ],
   "scripts": {
     "build": "tsc --declaration --project src",
-    "docs": "jsdoc2md --configure jsdoc2md.json --heading-depth 3 -t jsdoc2md/README.md.hbs src/index.ts > README.md",
+    "docs": "jsdoc2md --configure jsdoc2md/jsdoc2md.json --heading-depth 3 -t jsdoc2md/README.md.hbs src/index.ts > README.md",
     "lint": "eslint 'src/**/*.ts'",
-    "prepublishOnly": "npm run build && npm run docs",
+    "prepare": "npm run build && npm run docs",
+    "prepublishOnly": "npm run lint",
     "test": "mocha -r ts-node/register --exit test/**/*.test.ts"
   },
   "repository": {

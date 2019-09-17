@@ -9,10 +9,11 @@ RUN mkdir /home/node/app /home/node/app/src /home/node/app/test
 WORKDIR /home/node/app
 
 COPY --chown=node:node package*.json ./
+COPY --chown=node:node tsconfig.json ./
+COPY --chown=node:node src ./src/
+COPY --chown=node:node jsdoc2md ./jsdoc2md/
 RUN npm install
 
-COPY --chown=node:node tsconfig.json ./
 COPY --chown=node:node scripts ./scripts/
-COPY --chown=node:node src ./src/
 COPY --chown=node:node test ./test/
 CMD ["./node_modules/.bin/ts-node", "test/app.ts"]
