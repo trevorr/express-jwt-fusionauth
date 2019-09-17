@@ -152,7 +152,7 @@ export class ExpressJwtFusionAuth {
             client_id: effectiveOptions.oauthConfig.clientId,
             redirect_uri: effectiveOptions.oauthConfig.redirectUri,
             response_type: 'code',
-            state: req.path
+            state: req.originalUrl
           };
           const url = `${self.fusionAuthUrl}/oauth2/authorize?${qs.stringify(params)}`;
           debug(`Redirecting to OAuth login: ${url}`);
@@ -176,7 +176,7 @@ export class ExpressJwtFusionAuth {
    * The request must have already had the JWT parsed and validated by the
    * `ExpressJwtFusionAuth.jwt` middleware. If the JWT is not present or does
    * not have one of the required roles, the request is failed with HTTP 403 Forbidden.
-   * @param {string} roles the roles to check for
+   * @param {string} roleOrRoles the role or roles to check for
    */
   public jwtRole(roleOrRoles: string | string[]): express.RequestHandler {
     const self = this;

@@ -99,7 +99,7 @@ app.listen();
 * [ExpressJwtFusionAuth](#ExpressJwtFusionAuth)
     * [new ExpressJwtFusionAuth(fusionAuthUrl)](#new_ExpressJwtFusionAuth_new)
     * [.jwt(options)](#ExpressJwtFusionAuth+jwt)
-    * [.jwtRole(roles)](#ExpressJwtFusionAuth+jwtRole)
+    * [.jwtRole(roleOrRoles)](#ExpressJwtFusionAuth+jwtRole)
     * [.oauthCompletion(config)](#ExpressJwtFusionAuth+oauthCompletion)
 
 <a name="new_ExpressJwtFusionAuth_new"></a>
@@ -129,7 +129,7 @@ or disabled for all clients.</p>
 
 <a name="ExpressJwtFusionAuth+jwtRole"></a>
 
-#### expressJwtFusionAuth.jwtRole(roles)
+#### expressJwtFusionAuth.jwtRole(roleOrRoles)
 <p>Returns a middleware/handler that checks whether a request has a valid JWT
 attached that has at least one of the given application roles.
 The request must have already had the JWT parsed and validated by the
@@ -140,7 +140,7 @@ not have one of the required roles, the request is failed with HTTP 403 Forbidde
 
 | Param | Type | Description |
 | --- | --- | --- |
-| roles | <code>string</code> | <p>the roles to check for</p> |
+| roleOrRoles | <code>string</code> | <p>the role or roles to check for</p> |
 
 <a name="ExpressJwtFusionAuth+oauthCompletion"></a>
 
