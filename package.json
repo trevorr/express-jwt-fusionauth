@@ -8,6 +8,7 @@
     "build": "tsc --declaration --project src",
     "docs": "jsdoc2md --configure jsdoc2md.json --heading-depth 3 -t jsdoc2md/README.md.hbs src/index.ts > README.md",
     "lint": "eslint 'src/**/*.ts'",
+    "prepublishOnly": "npm run build && npm run docs",
     "test": "mocha -r ts-node/register --exit test/**/*.test.ts"
   },
   "repository": {
@@ -50,11 +51,17 @@
     "cookie-parser": "^1.4.4",
     "eslint": "^6.2.0",
     "eslint-plugin-promise": "^4.2.1",
+    "husky": "^3.0.5",
     "jsdoc-babel": "^0.5.0",
     "jsdoc-to-markdown": "^5.0.1",
     "mocha": "^6.2.0",
     "nodemon": "^1.19.1",
     "ts-node": "^8.3.0",
     "typescript": "^3.6.3"
+  },
+  "husky": {
+    "hooks": {
+      "pre-push": "npm run build && npm run docs && npm run lint"
+    }
   }
 }
