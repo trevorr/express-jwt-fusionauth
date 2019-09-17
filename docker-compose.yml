@@ -60,6 +60,7 @@ services:
 
   app:
     build: .
+    container_name: express-jwt-fusionauth_app
     depends_on:
       - fusionauth
     environment:

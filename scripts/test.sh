@@ -3,4 +3,4 @@
 set -e
 
 docker-compose up --build -d
-docker exec -t express-jwt-fusionauth_app_1 ./scripts/configure-and-test.sh
+docker exec -t express-jwt-fusionauth_app ./scripts/configure-and-test.sh
