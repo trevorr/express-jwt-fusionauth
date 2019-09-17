@@ -15,7 +15,6 @@ if [ ! -r $TMPDIR/api.key ]; then
   CLIENT_ID=$(sed -E -n '/input type="hidden" name="client_id"/{ s/.*value="([^"]*)".*/\1/ p; }' $TMPDIR/login.html)
   TENANT_ID=$(sed -E -n '/input type="hidden" name="tenantId"/{ s/.*value="([^"]*)".*/\1/ p; }' $TMPDIR/login.html)
   STATE=$(sed -E -n '/input type="hidden" name="state"/{ s/.*value="([^"]*)".*/\1/ p; }' $TMPDIR/login.html)
-  rm $TMPDIR/login.html
 
   echo "Client ID: ${CLIENT_ID}"
   echo "Tenant ID: ${TENANT_ID}"
@@ -26,12 +25,10 @@ if [ ! -r $TMPDIR/api.key ]; then
 
   CSRF_TOKEN=$(sed -E -n '/input type="hidden" name="primeCSRFToken"/{ s/.*value="([^"]*)".*/\1/ p; }' $TMPDIR/add.html)
   API_KEY=$(sed -E -n '/input .* name="authenticationKey.id"/{ s/.*value="([^"]*)".*/\1/ p; }' $TMPDIR/add.html)
-  rm $TMPDIR/add.html
 
   echo "API Key: ${API_KEY}"
 
   curl -sSL -b $TMPDIR/cookies.txt -c $TMPDIR/cookies.txt -o /dev/null $FUSIONAUTH_URL/admin/api/add -H 'Content-Type: application/x-www-form-urlencoded' -H "Referer: $FUSIONAUTH_URL/admin/api/add" -d "primeCSRFToken=${CSRF_TOKEN}&authenticationKey.id=${API_KEY}"
-  rm $TMPDIR/cookies.txt
 
   echo $TENANT_ID > $TMPDIR/tenant.id
   echo $API_KEY > $TMPDIR/api.key
