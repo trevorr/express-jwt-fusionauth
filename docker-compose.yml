@@ -20,6 +20,7 @@ services:
     environment:
       - cluster.name=fusionauth
       - bootstrap.memory_lock=true
+      - bootstrap.system_call_filter=false
       - "ES_JAVA_OPTS=${ES_JAVA_OPTS}"
     ports:
       - 9200:9200
