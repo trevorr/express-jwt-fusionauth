@@ -1,5 +1,7 @@
 # express-jwt-fusionauth
 
+[![npm version](https://badge.fury.io/js/express-jwt-fusionauth.svg)](https://badge.fury.io/js/express-jwt-fusionauth)
+
 [Express](https://expressjs.com/) middleware for JSON Web Token ([JWT](https://jwt.io/))-based
 authentication against [FusionAuth](https://fusionauth.io/). It provides three main functions:
 
