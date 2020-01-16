@@ -134,7 +134,7 @@ export class ExpressJwtFusionAuth {
       }
       if (token) {
         try {
-          const jwt = await JWT.verify(token, await self.getJWKS(), effectiveOptions.verifyOptions) as JwtClaims;
+          const jwt = JWT.verify(token, await self.getJWKS(), effectiveOptions.verifyOptions) as JwtClaims;
           req.jwt = jwt;
           debug(`Found valid JWT in ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
           return next();
