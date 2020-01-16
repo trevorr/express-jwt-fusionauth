@@ -37,6 +37,10 @@ app.get('/authed',
   auth.jwt(jwtOptions),
   auth.jwtRole(['root', 'admin']),
   (req: express.Request, res) => res.json(req.jwt!));
+app.get('/super',
+  auth.jwt(jwtOptions),
+  auth.jwtRole('super'),
+  (req: express.Request, res) => res.json(req.jwt!));
 app.get('/opt-authed',
   auth.jwt({ ...jwtOptions, required: false }),
   (req: express.Request, res) => res.send(req.jwt ? req.jwt.email : 'nobody'));
@@ -44,3 +48,5 @@ app.get('/opt-authed',
 const port = parseInt(PORT);
 app.listen(port);
 console.log(`Listening on port ${port}`);
+
+process.on('SIGINT', () => process.exit());

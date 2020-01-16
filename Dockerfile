@@ -16,4 +16,6 @@ RUN npm install
 
 COPY --chown=node:node scripts ./scripts/
 COPY --chown=node:node test ./test/
-CMD ["./node_modules/.bin/ts-node", "test/app.ts"]
+COPY --chown=node:node .mocha* ./
+COPY --chown=node:node .nyc* ./
+CMD ["./scripts/start.sh"]

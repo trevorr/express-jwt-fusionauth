@@ -69,7 +69,8 @@ if [ ! -r $TMPDIR/application.json ]; then
         "enabledGrants": [
           "authorization_code",
           "refresh_token"
-        ]
+        ],
+        "generateRefreshTokens": true
       },
       "roles": [
         {
