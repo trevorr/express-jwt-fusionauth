@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import express from 'express';
+import { JWKS, JWT } from 'jose';
 import qs from 'qs';
-import { JWKS, JWT } from '@panva/jose';
 
 const debug = require('debug')('express-jwt-fusionauth');
 

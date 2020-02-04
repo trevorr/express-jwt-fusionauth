@@ -48,10 +48,10 @@
     "statements": 100
   },
   "dependencies": {
-    "@panva/jose": "^1.9.3",
     "axios": "^0.19.1",
     "debug": "^4.1.1",
     "express": "^4.17.1",
+    "jose": "^1.22.1",
     "qs": "^6.9.1"
   },
   "devDependencies": {
