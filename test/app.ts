@@ -7,14 +7,16 @@ const { JWT_ISSUER = 'acme.com' } = process.env;
 const { OAUTH_CLIENT_ID = '31d7b8e8-f67e-4fb0-9c0b-872b793cda7a' } = process.env;
 const { OAUTH_CLIENT_SECRET = 'VYKsyjndsJ7lTnS2Z5vuz4SM-8Dvy1-4_yvqEoALMfY' } = process.env;
 const { OAUTH_REDIRECT_URI = 'http://localhost:3000/oauth' } = process.env;
-const { OAUTH_COOKIE_DOMAIN = 'localhost' } = process.env;
+const { OAUTH_COOKIE_DOMAIN = 'app.domain' } = process.env;
 const { PORT = '3000' } = process.env;
 
 const oauthConfig = {
   clientId: OAUTH_CLIENT_ID,
   clientSecret: OAUTH_CLIENT_SECRET,
   redirectUri: OAUTH_REDIRECT_URI,
-  cookieDomain: OAUTH_COOKIE_DOMAIN
+  cookieConfig: {
+    domain: OAUTH_COOKIE_DOMAIN
+  }
 };
 
 const jwtOptions = {
@@ -33,17 +35,17 @@ const app = express();
 app.use(cookieParser());
 app.get('/', (_, res) => res.send('OK'));
 app.get('/oauth', auth.oauthCompletion(oauthConfig));
-app.get('/authed',
-  auth.jwt(jwtOptions),
-  auth.jwtRole(['root', 'admin']),
-  (req: express.Request, res) => res.json(req.jwt!));
-app.get('/super',
-  auth.jwt(jwtOptions),
-  auth.jwtRole('super'),
-  (req: express.Request, res) => res.json(req.jwt!));
-app.get('/opt-authed',
-  auth.jwt({ ...jwtOptions, required: false }),
-  (req: express.Request, res) => res.send(req.jwt ? req.jwt.email : 'nobody'));
+app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: express.Request, res) => {
+  const { jwt } = req;
+  res.json({ jwt });
+});
+app.get('/super', auth.jwt(jwtOptions), auth.jwtRole('super'), (req: express.Request, res) => {
+  const { jwt } = req;
+  res.json({ jwt });
+});
+app.get('/opt-authed', auth.jwt({ ...jwtOptions, required: false }), (req: express.Request, res) =>
+  res.send(req.jwt ? req.jwt.email : 'nobody')
+);
 
 const port = parseInt(PORT);
 app.listen(port);

@@ -58,7 +58,10 @@ if [ ! -r $TMPDIR/application.json ]; then
       "jwtConfiguration": {
         "enabled": true,
         "refreshTokenTimeToLiveInMinutes": 43200,
-        "timeToLiveInSeconds": 3600
+        "timeToLiveInSeconds": 5
+      },
+      "loginConfiguration": {
+        "allowTokenRefresh": true
       },
       "oauthConfiguration": {
         "clientSecret": "VYKsyjndsJ7lTnS2Z5vuz4SM-8Dvy1-4_yvqEoALMfY",

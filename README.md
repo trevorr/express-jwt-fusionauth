@@ -10,6 +10,7 @@ authentication against [FusionAuth](https://fusionauth.io/). It provides three m
   requiring that it be present.\
   As a convenience for browser-based API testing, the client can be optionally redirected
   to a login page when the required JWT is missing or invalid.
+* Automatically refresh an expired JWT token if a refresh token cookie is available.
 * Check that the JWT has at least one of a set of application-defined roles.
 * Implement the [redirection endpoint](https://tools.ietf.org/html/rfc6749#section-3.1.2)
   that exchanges an OAuth authorization code for a JWT.
@@ -46,7 +47,9 @@ const oauthConfig = {
   clientId: OAUTH_CLIENT_ID,
   clientSecret: OAUTH_CLIENT_SECRET,
   redirectUri: OAUTH_REDIRECT_URI,
-  cookieDomain: OAUTH_COOKIE_DOMAIN
+  cookieConfig: {
+    domain: OAUTH_COOKIE_DOMAIN
+  }
 };
 
 const jwtOptions = {

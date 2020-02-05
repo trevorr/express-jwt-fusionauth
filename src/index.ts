@@ -1,6 +1,6 @@
-import axios, { AxiosInstance } from 'axios';
-import express from 'express';
-import { JWKS, JWT } from 'jose';
+import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import express, { CookieOptions } from 'express';
+import { errors as JWTErrors, JWKS, JWT } from 'jose';
 import qs from 'qs';
 
 const debug = require('debug')('express-jwt-fusionauth');
@@ -38,6 +38,16 @@ declare module 'express' {
   }
 }
 
+/** Configuration for setting access and refresh token cookies. */
+export interface CookieConfig {
+  /** Domain to associate with token cookies. */
+  domain?: string;
+  /** Whether to require token cookies only be sent in network requests and not be made available to scripts. Defaults to true. */
+  httpOnly?: boolean;
+  /** Whether to require token cookies only be sent over a secure connection. Defaults to whether `NODE_ENV` is `production`. */
+  secure?: boolean;
+}
+
 /** Configuration for OAuth 2.0 (RFC 6749) authentication flow. */
 export interface OAuthConfig {
   /** Application/client ID attempting to authenticate the user. */
@@ -46,13 +56,13 @@ export interface OAuthConfig {
   clientSecret?: string;
   /** URI of the endpoint that will exchange an authorization code for a JWT. */
   redirectUri: string;
-  /** Domain to associate with cookies containing the access token and optional refresh token after successful authentication. */
-  cookieDomain?: string;
+  /** Cookie configuration used for setting access and refresh token cookies after OAuth completion. */
+  cookieConfig?: CookieConfig;
 }
 
 /** Options controlling how to obtain and verify a JWT. */
 export interface JwtOptions {
-  /** JWT verification options passed to `@panva/jose` `JWT.verify`. */
+  /** JWT verification options passed to `jose` `JWT.verify`. */
   verifyOptions?: JWT.VerifyOptions<false>;
   /** Indicates whether a JWT is required or the route is optionally authenticated. */
   required?: boolean;
@@ -62,10 +72,18 @@ export interface JwtOptions {
   browserLogin?: boolean;
   /** OAuth configuration used when redirecting to the OAuth login URL. */
   oauthConfig?: OAuthConfig;
+  /** Cookie configuration used for setting access token cookie after refresh. Uses OAuth cookie configuration by default. */
+  cookieConfig?: CookieConfig;
 }
 
 /** @ignore */
-const defaultJwtOptions = {
+const defaultCookieConfig: CookieConfig = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production'
+};
+
+/** @ignore */
+const defaultJwtOptions: JwtOptions = {
   required: true,
   alwaysLogin: false,
   browserLogin: true
@@ -78,6 +96,10 @@ interface TokenResponse {
   refresh_token: string;
   token_type: string;
   userId: string;
+}
+
+interface RefreshResponse {
+  token: string;
 }
 
 /** Provides factory methods for Express middleware/handlers used to obtain and validate JSON Web Tokens (JWTs). */
@@ -117,8 +139,7 @@ export class ExpressJwtFusionAuth {
    */
   public jwt(options: JwtOptions): express.RequestHandler {
     const effectiveOptions = Object.assign({}, defaultJwtOptions, options);
-    const self = this;
-    async function middleware(req: express.Request, res: express.Response, next: Function): Promise<void> {
+    return async (req: express.Request, res: express.Response, next: Function): Promise<void> => {
       let token;
       let tokenSource;
       const { headers = {}, cookies = {} } = req;
@@ -134,40 +155,86 @@ export class ExpressJwtFusionAuth {
       }
       if (token) {
         try {
-          const jwt = JWT.verify(token, await self.getJWKS(), effectiveOptions.verifyOptions) as JwtClaims;
-          req.jwt = jwt;
-          debug(`Found valid JWT in ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
-          return next();
+          const keyStore = await this.getJWKS();
+          try {
+            let jwt;
+            try {
+              jwt = JWT.verify(token, keyStore, effectiveOptions.verifyOptions) as JwtClaims;
+            } catch (err) {
+              if (err instanceof JWTErrors.JWTExpired && cookies.refresh_token) {
+                try {
+                  token = await this.refreshJwt(cookies.refresh_token);
+                } catch {
+                  throw err;
+                }
+
+                tokenSource = 'refresh_token cookie';
+                jwt = JWT.verify(token, keyStore, effectiveOptions.verifyOptions) as JwtClaims;
+
+                const cookieOptions: CookieOptions = {
+                  domain: req.hostname,
+                  ...defaultCookieConfig,
+                  ...options.oauthConfig?.cookieConfig,
+                  ...options.cookieConfig
+                };
+                res.cookie('access_token', token, cookieOptions);
+              } else {
+                throw err;
+              }
+            }
+            req.jwt = jwt;
+            debug(`Found valid JWT using ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
+            return next();
+          } catch (err) {
+            debug(`Invalid JWT provided by ${tokenSource}: ${err.message}`);
+          }
         } catch (err) {
-          debug(`Invalid JWT provided in ${tokenSource}: ${err.message}`);
+          /* istanbul ignore next */
+          debug(`Error fetching keys to verify JWT: ${err.message}`);
         }
       } else {
         debug('No JWT provided in Authorization header or access_token cookie');
       }
       if (effectiveOptions.required) {
-        if ((effectiveOptions.alwaysLogin ||
-              (effectiveOptions.browserLogin && headers.accept && /^text\/html,/i.test(headers.accept))) &&
-            effectiveOptions.oauthConfig) {
+        if (
+          (effectiveOptions.alwaysLogin ||
+            (effectiveOptions.browserLogin && headers.accept && /^text\/html,/i.test(headers.accept))) &&
+          effectiveOptions.oauthConfig
+        ) {
           const params = {
             client_id: effectiveOptions.oauthConfig.clientId,
             redirect_uri: effectiveOptions.oauthConfig.redirectUri,
             response_type: 'code',
             state: req.originalUrl
           };
-          const url = `${self.fusionAuthUrl}/oauth2/authorize?${qs.stringify(params)}`;
+          const url = `${this.fusionAuthUrl}/oauth2/authorize?${qs.stringify(params)}`;
           debug(`Redirecting to OAuth login: ${url}`);
           res.redirect(url);
         } else {
           debug('Failing unauthenticated request');
           res.setHeader('WWW-Authenticate', 'Bearer');
-          self.fail(res, 401, 'Authorization required');
+          this.fail(res, 401, 'Authorization required');
         }
       } else {
         debug('Proceeding with unauthenticated request');
         next();
       }
+    };
+  }
+
+  private async refreshJwt(refreshToken: string): Promise<string> {
+    try {
+      const res = await this.fusionAuth.post<RefreshResponse>('/api/jwt/refresh', { refreshToken });
+      return res.data.token;
+    } catch (err) {
+      let { message } = err;
+      if (err.response) {
+        const res = err.response as AxiosResponse;
+        message = `HTTP ${res.status}: ${JSON.stringify(res.data)}`;
+      }
+      debug(`Failed to refresh token: ${message}`);
+      throw err;
     }
-    return middleware;
   }
 
   /**
@@ -179,9 +246,8 @@ export class ExpressJwtFusionAuth {
    * @param {string} roleOrRoles the role or roles to check for
    */
   public jwtRole(roleOrRoles: string | string[]): express.RequestHandler {
-    const self = this;
     const requiredRoles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
-    async function middleware(req: express.Request, res: express.Response, next: Function): Promise<void> {
+    return async (req: express.Request, res: express.Response, next: Function): Promise<void> => {
       const { jwt } = req;
       if (jwt && Array.isArray(jwt.roles)) {
         const jwtRoles = jwt.roles;
@@ -191,9 +257,8 @@ export class ExpressJwtFusionAuth {
         }
       }
       debug(`Failing request without JWT role(s): ${requiredRoles.join(', ')}`);
-      self.fail(res, 403, 'Not authorized');
-    }
-    return middleware;
+      this.fail(res, 403, 'Not authorized');
+    };
   }
 
   /**
@@ -202,15 +267,16 @@ export class ExpressJwtFusionAuth {
    * @param {OAuthConfig} config the OAuth 2.0 configuration settings
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
-    const self = this;
-    async function handler(req: express.Request, res: express.Response): Promise<void> {
-      const { query: { code, state } } = req;
+    return async (req: express.Request, res: express.Response): Promise<void> => {
+      const {
+        query: { code, state }
+      } = req;
       if (!code) {
-        self.fail(res, 400, 'Authorization code required');
+        this.fail(res, 400, 'Authorization code required');
         return;
       }
       try {
-        const tokenRes = await self.fusionAuth.post('/oauth2/token', null, {
+        const tokenRes = await this.fusionAuth.post('/oauth2/token', null, {
           params: {
             client_id: config.clientId,
             client_secret: config.clientSecret,
@@ -220,10 +286,11 @@ export class ExpressJwtFusionAuth {
           }
         });
         const data = tokenRes.data as TokenResponse;
-        const cookieOptions = {
-          domain: config.cookieDomain || req.hostname,
-          httpOnly: true
-        }
+        const cookieOptions: CookieOptions = {
+          domain: req.hostname,
+          ...defaultCookieConfig,
+          ...config.cookieConfig
+        };
         res.cookie('access_token', data.access_token, cookieOptions);
         if (data.refresh_token) {
           res.cookie('refresh_token', data.refresh_token, cookieOptions);
@@ -235,10 +302,9 @@ export class ExpressJwtFusionAuth {
         }
       } catch (err) {
         debug(`Failed to exchange authorization code for token: ${err.message}`);
-        self.fail(res, err.response ? err.response.status : 500, 'Failed to exchange authorization code for token');
+        this.fail(res, err.response ? err.response.status : 500, 'Failed to exchange authorization code for token');
       }
-    }
-    return handler;
+    };
   }
 
   protected fail(res: express.Response, statusCode: number, message: string): void {

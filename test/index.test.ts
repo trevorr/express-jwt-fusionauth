@@ -11,6 +11,7 @@ const api = axios.create({ baseURL: appUrl });
 
 let code: string | null;
 let access_token: string;
+let refresh_token: string;
 
 interface AuthorizeOptions {
   scope?: string;
@@ -53,14 +54,17 @@ async function getAuthorizationCode(options?: AuthorizeOptions): Promise<string>
   return code;
 }
 
+function getSetCookieHeader(res: AxiosResponse): string[] {
+  const setCookie: string | string[] | undefined = res.headers['set-cookie'];
+  return setCookie ? (Array.isArray(setCookie) ? setCookie : [setCookie]) : [];
+}
+
 function getCookies(res: AxiosResponse): Record<string, string> {
-  const result = {};
-  let setCookie: string | string[] | undefined = res.headers['set-cookie'];
-  if (setCookie) {
-    if (!Array.isArray(setCookie)) setCookie = [setCookie];
-    setCookie.reduce((obj, str) => Object.assign(obj, cookie.parse(str)), result);
-  }
-  return result;
+  return getSetCookieHeader(res).reduce((obj, str) => Object.assign(obj, cookie.parse(str)), {});
+}
+
+function hasHttpOnlyCookies(res: AxiosResponse): boolean {
+  return getSetCookieHeader(res).reduce<boolean>((acc, str) => acc && str.includes('HttpOnly'), true);
 }
 
 describe('express-jwt-fusionauth', () => {
@@ -152,6 +156,8 @@ describe('express-jwt-fusionauth', () => {
     expect(res.status).to.equal(204);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
+    expect(cookies.Domain).to.equal('app.domain');
+    expect(hasHttpOnlyCookies(res)).to.be.true;
     access_token = cookies.access_token;
   });
 
@@ -170,6 +176,8 @@ describe('express-jwt-fusionauth', () => {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
+    expect(cookies.Domain).to.equal('app.domain');
+    expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
   });
 
@@ -184,6 +192,9 @@ describe('express-jwt-fusionauth', () => {
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.refresh_token).to.be.a('string');
+    expect(cookies.Domain).to.equal('app.domain');
+    expect(hasHttpOnlyCookies(res)).to.be.true;
+    refresh_token = cookies.refresh_token;
   });
 
   it('authenticated endpoint with Authorization Header Bearer token', async () => {
@@ -193,16 +204,16 @@ describe('express-jwt-fusionauth', () => {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.aud).to.equal(applicationId);
-    expect(res.data.exp).to.be.a('number');
-    expect(res.data.iat).to.be.a('number');
-    expect(res.data.iss).to.equal('acme.com');
-    expect(res.data.sub).to.be.a('string');
-    expect(res.data.authenticationType).to.equal('PASSWORD');
-    expect(res.data.email).to.equal('test@example.com');
-    expect(res.data.email_verified).to.be.true;
-    expect(res.data.applicationId).to.equal(applicationId);
-    expect(res.data.roles).to.eql(['admin']);
+    expect(res.data.jwt.aud).to.equal(applicationId);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal('acme.com');
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('PASSWORD');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(applicationId);
+    expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
   it('authenticated endpoint with access_token cookie', async () => {
@@ -212,16 +223,16 @@ describe('express-jwt-fusionauth', () => {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.aud).to.equal(applicationId);
-    expect(res.data.exp).to.be.a('number');
-    expect(res.data.iat).to.be.a('number');
-    expect(res.data.iss).to.equal('acme.com');
-    expect(res.data.sub).to.be.a('string');
-    expect(res.data.authenticationType).to.equal('PASSWORD');
-    expect(res.data.email).to.equal('test@example.com');
-    expect(res.data.email_verified).to.be.true;
-    expect(res.data.applicationId).to.equal(applicationId);
-    expect(res.data.roles).to.eql(['admin']);
+    expect(res.data.jwt.aud).to.equal(applicationId);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal('acme.com');
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('PASSWORD');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(applicationId);
+    expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
   it('authenticated endpoint without required role', async () => {
@@ -273,4 +284,50 @@ describe('express-jwt-fusionauth', () => {
     expect(res.status).to.equal(200);
     expect(res.data).to.equal('nobody');
   });
+
+  it('authenticated endpoint with refresh_token cookie', async function() {
+    this.timeout(10000);
+    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    const res = await api.get('/authed', {
+      headers: {
+        Cookie: `access_token=${access_token}; refresh_token=${refresh_token}`
+      }
+    });
+    expect(res.status).to.equal(200);
+    expect(res.data.jwt.aud).to.equal(applicationId);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal('acme.com');
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(applicationId);
+    expect(res.data.jwt.roles).to.eql(['admin']);
+    const cookies = getCookies(res);
+    expect(cookies.access_token).to.be.a('string');
+    expect(cookies.access_token).to.not.equal(access_token);
+    expect(cookies.Domain).to.equal('app.domain');
+    expect(hasHttpOnlyCookies(res)).to.be.true;
+  });
+
+  it('authenticated endpoint with invalid refresh_token cookie', async function() {
+    try {
+      await api.get('/authed', {
+        headers: {
+          Cookie: `access_token=${access_token}; refresh_token=junk`
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(401);
+      return;
+    }
+    fail('rejection expected');
+  });
 });
+
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>(resolve => {
+    setTimeout(() => resolve(), ms);
+  });
+}

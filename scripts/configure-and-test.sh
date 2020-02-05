@@ -8,6 +8,9 @@ curl -sS -o /dev/null --retry 10 --retry-connrefused http://fusionauth:9011
 echo "Configuring FusionAuth"
 $(dirname $BASH_SOURCE)/configure.sh
 
+echo "Waiting for test server"
+curl -sS -o /dev/null --retry 10 --retry-connrefused http://app:3000
+
 echo "Running npm test"
 npm test
 
