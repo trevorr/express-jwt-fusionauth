@@ -9,12 +9,6 @@ const debug = require('debug')('express-jwt-fusionauth');
 export interface JwtClaims {
   /** Intended audience of the JWT, which for FusionAuth is the application/client ID. */
   aud: string;
-  /** Authentication method used to create the JWT, such as "PASSWORD". */
-  authenticationType: string;
-  /** The email address of the user represented by the JWT. */
-  email: string;
-  /** Indicates whether the user's email address has been verified. */
-  email_verified: boolean;
   /** JWT expiration instant in seconds since Unix epoch. */
   exp: number;
   /** JWT issued-at instant in seconds since Unix epoch. */
@@ -23,6 +17,13 @@ export interface JwtClaims {
   iss: string;
   /** Subject of the JWT, which is the FusionAuth user ID. */
   sub: string;
+
+  /** Authentication method used to create the JWT, such as "PASSWORD". */
+  authenticationType: string;
+  /** The email address of the user represented by the JWT. */
+  email?: string;
+  /** Indicates whether the user's email address has been verified. */
+  email_verified?: boolean;
   /** Preferred username associated with the application, if any. */
   preferred_username?: string;
   /** Application/client ID associated with this JWT, if the user is registered for it. */
