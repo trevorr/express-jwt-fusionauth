@@ -140,7 +140,7 @@ export class ExpressJwtFusionAuth {
    */
   public jwt(options: JwtOptions): express.RequestHandler {
     const effectiveOptions = Object.assign({}, defaultJwtOptions, options);
-    return async (req: express.Request, res: express.Response, next: Function): Promise<void> => {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       let token;
       let tokenSource;
       const { headers = {}, cookies = {} } = req;
@@ -248,7 +248,7 @@ export class ExpressJwtFusionAuth {
    */
   public jwtRole(roleOrRoles: string | string[]): express.RequestHandler {
     const requiredRoles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
-    return async (req: express.Request, res: express.Response, next: Function): Promise<void> => {
+    return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       const { jwt } = req;
       if (jwt && Array.isArray(jwt.roles)) {
         const jwtRoles = jwt.roles;
@@ -297,7 +297,7 @@ export class ExpressJwtFusionAuth {
           res.cookie('refresh_token', data.refresh_token, cookieOptions);
         }
         if (state) {
-          res.redirect(state);
+          res.redirect(state as string);
         } else {
           res.sendStatus(204);
         }
