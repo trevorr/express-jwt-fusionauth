@@ -67,7 +67,10 @@ function hasHttpOnlyCookies(res: AxiosResponse): boolean {
   return getSetCookieHeader(res).reduce<boolean>((acc, str) => acc && str.includes('HttpOnly'), true);
 }
 
-describe('express-jwt-fusionauth', () => {
+describe('express-jwt-fusionauth', function () {
+  this.timeout(10000);
+  this.slow(2000);
+
   it('health check', async () => {
     const res = await api.get('/');
     expect(res.status).to.equal(200);

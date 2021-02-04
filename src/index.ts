@@ -64,7 +64,7 @@ export interface OAuthConfig {
 /** Options controlling how to obtain and verify a JWT. */
 export interface JwtOptions {
   /** JWT verification options passed to `jose` `JWT.verify`. */
-  verifyOptions?: JWT.VerifyOptions<false>;
+  verifyOptions?: JWT.VerifyOptions;
   /** Indicates whether a JWT is required or the route is optionally authenticated. */
   required?: boolean;
   /** Whether to always redirect to the OAuth login URL if a JWT is required but not present or valid. */
