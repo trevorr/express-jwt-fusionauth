@@ -1,6 +1,6 @@
 {
   "name": "express-jwt-fusionauth",
-  "version": "2.0.1",
+  "version": "3.0.0",
   "description": "Express middleware for JWT-based authentication against FusionAuth",
   "keywords": [
     "express",
@@ -37,9 +37,11 @@
     }
   },
   "prettier": {
+    "arrowParens": "avoid",
     "printWidth": 120,
     "semi": true,
-    "singleQuote": true
+    "singleQuote": true,
+    "trailingComma": "none"
   },
   "nyc": {
     "branches": 80,
@@ -51,7 +53,7 @@
     "axios": "^0.21.1",
     "debug": "^4.3.1",
     "express": "^4.17.1",
-    "jose": "^2.0.4",
+    "jose": "^3.5.4",
     "qs": "^6.9.6"
   },
   "devDependencies": {

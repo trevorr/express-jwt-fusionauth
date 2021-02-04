@@ -1,12 +1,19 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
 import express, { CookieOptions } from 'express';
-import { errors as JWTErrors, JWKS, JWT } from 'jose';
+import createRemoteJWKSet from 'jose/jwks/remote';
+import jwtVerify, { JWTPayload, JWTVerifyOptions } from 'jose/jwt/verify';
+import { JWTExpired } from 'jose/util/errors';
 import qs from 'qs';
 
 const debug = require('debug')('express-jwt-fusionauth');
 
-/** JWT claims as defined by RFC 7519 and FusionAuth. */
-export interface JwtClaims {
+/**
+ * JWT claims as defined by RFC 7519 and FusionAuth.
+ *
+ * https://tools.ietf.org/html/rfc7519
+ * https://fusionauth.io/docs/v1/tech/oauth/tokens/#access-token-claims
+ */
+export interface JwtClaims extends JWTPayload {
   /** Intended audience of the JWT, which for FusionAuth is the application/client ID. */
   aud: string;
   /** JWT expiration instant in seconds since Unix epoch. */
@@ -17,6 +24,8 @@ export interface JwtClaims {
   iss: string;
   /** Subject of the JWT, which is the FusionAuth user ID. */
   sub: string;
+  /** The unique identifier for this JWT. */
+  jti?: string;
 
   /** Authentication method used to create the JWT, such as "PASSWORD". */
   authenticationType: string;
@@ -63,8 +72,8 @@ export interface OAuthConfig {
 
 /** Options controlling how to obtain and verify a JWT. */
 export interface JwtOptions {
-  /** JWT verification options passed to `jose` `JWT.verify`. */
-  verifyOptions?: JWT.VerifyOptions;
+  /** JWT verification options passed to `jose` `jwtVerify`. */
+  verifyOptions?: JWTVerifyOptions;
   /** Indicates whether a JWT is required or the route is optionally authenticated. */
   required?: boolean;
   /** Whether to always redirect to the OAuth login URL if a JWT is required but not present or valid. */
@@ -103,10 +112,12 @@ interface RefreshResponse {
   token: string;
 }
 
+type JWKS = ReturnType<typeof createRemoteJWKSet>;
+
 /** Provides factory methods for Express middleware/handlers used to obtain and validate JSON Web Tokens (JWTs). */
 export class ExpressJwtFusionAuth {
   private readonly fusionAuth: AxiosInstance;
-  private jwks: JWKS.KeyStore | null = null;
+  private jwks: JWKS | undefined;
 
   /**
    * Creates a middleware factory that communicates with FusionAuth at the given URL.
@@ -118,14 +129,9 @@ export class ExpressJwtFusionAuth {
     });
   }
 
-  protected async fetchJWKS(): Promise<JWKS.KeyStore> {
-    const res = await this.fusionAuth.get('/.well-known/jwks.json');
-    return JWKS.asKeyStore(res.data, { ignoreErrors: true });
-  }
-
-  protected async getJWKS(): Promise<JWKS.KeyStore> {
+  protected getJWKS(): JWKS {
     if (!this.jwks) {
-      this.jwks = await this.fetchJWKS();
+      this.jwks = createRemoteJWKSet(new URL(`${this.fusionAuthUrl}/.well-known/jwks.json`));
     }
     return this.jwks;
   }
@@ -156,13 +162,13 @@ export class ExpressJwtFusionAuth {
       }
       if (token) {
         try {
-          const keyStore = await this.getJWKS();
+          const keyStore = this.getJWKS();
           try {
-            let jwt;
+            let jwtPayload;
             try {
-              jwt = JWT.verify(token, keyStore, effectiveOptions.verifyOptions) as JwtClaims;
+              jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
             } catch (err) {
-              if (err instanceof JWTErrors.JWTExpired && cookies.refresh_token) {
+              if (err instanceof JWTExpired && cookies.refresh_token) {
                 try {
                   token = await this.refreshJwt(cookies.refresh_token);
                 } catch {
@@ -170,7 +176,7 @@ export class ExpressJwtFusionAuth {
                 }
 
                 tokenSource = 'refresh_token cookie';
-                jwt = JWT.verify(token, keyStore, effectiveOptions.verifyOptions) as JwtClaims;
+                jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
 
                 const cookieOptions: CookieOptions = {
                   domain: req.hostname,
@@ -183,6 +189,7 @@ export class ExpressJwtFusionAuth {
                 throw err;
               }
             }
+            const jwt = jwtPayload as JwtClaims;
             req.jwt = jwt;
             debug(`Found valid JWT using ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
             return next();
