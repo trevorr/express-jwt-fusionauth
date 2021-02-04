@@ -2,7 +2,7 @@ version: '3'
 
 services:
   db:
-    image: postgres:9.6
+    image: postgres:13.1
     environment:
       PGDATA: /var/lib/postgresql/data/pgdata
       POSTGRES_USER: ${POSTGRES_USER}
@@ -15,33 +15,10 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
 
-  search:
-    image: docker.elastic.co/elasticsearch/elasticsearch:6.3.1
-    environment:
-      - cluster.name=fusionauth
-      - bootstrap.memory_lock=true
-      - discovery.type=single-node
-      - http.host=0.0.0.0
-      - transport.host=127.0.0.1
-      - "ES_JAVA_OPTS=${ES_JAVA_OPTS}"
-    ports:
-      - 9200:9200
-      - 9300:9300
-    networks:
-      - search
-    restart: unless-stopped
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-
   fusionauth:
-    image: fusionauth/fusionauth-app:1.13.2
+    image: fusionauth/fusionauth-app:1.23.3
     depends_on:
       - db
-      - search
     environment:
       DATABASE_URL: jdbc:postgresql://db:5432/fusionauth
       DATABASE_ROOT_USER: ${POSTGRES_USER}
@@ -49,11 +26,9 @@ services:
       DATABASE_USER: ${DATABASE_USER}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD}
       FUSIONAUTH_MEMORY: ${FUSIONAUTH_MEMORY}
-      FUSIONAUTH_SEARCH_SERVERS: http://search:9200
       FUSIONAUTH_URL: http://fusionauth:9011
     networks:
      - db
-     - search
      - fusionauth
     restart: unless-stopped
     ports:
@@ -76,12 +51,9 @@ services:
 networks:
   db:
     driver: bridge
-  search:
-    driver: bridge
   fusionauth:
     driver: bridge
 
 volumes:
   db_data:
-  es_data:
   fa_config:

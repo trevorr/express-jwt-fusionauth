@@ -1,8 +1,8 @@
 ARG NODE_VERSION=14.15.4
 
-FROM node:${NODE_VERSION}
+FROM node:${NODE_VERSION}-alpine
 
-RUN apt-get update && apt-get -y install jq
+RUN apk add --no-cache bash curl jq
 
 USER node
 RUN mkdir /home/node/app /home/node/app/src /home/node/app/test
