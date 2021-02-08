@@ -86,6 +86,12 @@ export interface JwtOptions {
   cookieConfig?: CookieConfig;
 }
 
+export interface RefreshJwtResult {
+  token: string;
+  refreshToken: string;
+  payload: JwtClaims;
+}
+
 /** @ignore */
 const defaultCookieConfig: CookieConfig = {
   httpOnly: true,
@@ -110,6 +116,7 @@ interface TokenResponse {
 
 interface RefreshResponse {
   token: string;
+  refreshToken: string;
 }
 
 type JWKS = ReturnType<typeof createRemoteJWKSet>;
@@ -169,14 +176,16 @@ export class ExpressJwtFusionAuth {
               jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
             } catch (err) {
               if (err instanceof JWTExpired && cookies.refresh_token) {
+                let refresh;
                 try {
-                  token = await this.refreshJwt(cookies.refresh_token);
+                  refresh = await this.postRefresh(cookies.refresh_token, token);
                 } catch {
+                  // rethrow original error if refresh fails
                   throw err;
                 }
 
                 tokenSource = 'refresh_token cookie';
-                jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
+                jwtPayload = (await jwtVerify(refresh.token, keyStore, effectiveOptions.verifyOptions)).payload;
 
                 const cookieOptions: CookieOptions = {
                   domain: req.hostname,
@@ -184,7 +193,9 @@ export class ExpressJwtFusionAuth {
                   ...options.oauthConfig?.cookieConfig,
                   ...options.cookieConfig
                 };
-                res.cookie('access_token', token, cookieOptions);
+                res.cookie('access_token', refresh.token, cookieOptions);
+                // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
+                res.cookie('refresh_token', refresh.refreshToken, cookieOptions);
               } else {
                 throw err;
               }
@@ -230,10 +241,28 @@ export class ExpressJwtFusionAuth {
     };
   }
 
-  private async refreshJwt(refreshToken: string): Promise<string> {
+  /**
+   * Requests and parses/validates a new JWT/access token using a refresh token
+   * obtained from a prior OAuth login or JWT refresh.
+   * Note that the middleware/handler returned by `jwt()` will do this automatically
+   * for an expired access token if a refresh token is available.
+   * This function is provided for cases where an application needs to refresh explicitly,
+   * such as when exchanging a FusionAuth JWT for an application-generated JWT.
+   * @param options configuration options used for JWT verification
+   * @param refreshToken the refresh token from the prior login or refresh
+   * @param token the original, expired access token (for JWT Refresh webhook event)
+   */
+  public async refreshJwt(options: JwtOptions, refreshToken: string, token?: string): Promise<RefreshJwtResult> {
+    const { token: newToken, refreshToken: newRefreshToken } = await this.postRefresh(refreshToken, token);
+    const keyStore = this.getJWKS();
+    const jwtPayload = (await jwtVerify(newToken, keyStore, options.verifyOptions)).payload;
+    return { token: newToken, refreshToken: newRefreshToken, payload: jwtPayload as JwtClaims };
+  }
+
+  private async postRefresh(refreshToken: string, token?: string): Promise<RefreshResponse> {
     try {
-      const res = await this.fusionAuth.post<RefreshResponse>('/api/jwt/refresh', { refreshToken });
-      return res.data.token;
+      const res = await this.fusionAuth.post<RefreshResponse>('/api/jwt/refresh', { refreshToken, token });
+      return res.data;
     } catch (err) {
       let { message } = err;
       if (err.response) {

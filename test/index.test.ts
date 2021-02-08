@@ -310,8 +310,10 @@ describe('express-jwt-fusionauth', function () {
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.access_token).to.not.equal(access_token);
+    expect(cookies.refresh_token).to.be.a('string');
     expect(cookies.Domain).to.equal('app.domain');
     expect(hasHttpOnlyCookies(res)).to.be.true;
+    refresh_token = cookies.refresh_token;
   });
 
   it('authenticated endpoint with invalid refresh_token cookie', async function() {
@@ -326,6 +328,31 @@ describe('express-jwt-fusionauth', function () {
       return;
     }
     fail('rejection expected');
+  });
+
+  it('explicit refresh', async function() {
+    this.timeout(10000);
+    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    const res = await api.get('/refresh', {
+      headers: {
+        Cookie: `access_token=${access_token}; refresh_token=${refresh_token}`
+      }
+    });
+    expect(res.status).to.equal(200);
+    expect(res.data.token).to.be.a('string');
+    expect(res.data.token).to.not.equal(access_token);
+    expect(res.data.refreshToken).to.be.a('string');
+    expect(res.data.payload.aud).to.equal(applicationId);
+    expect(res.data.payload.exp).to.be.a('number');
+    expect(res.data.payload.iat).to.be.a('number');
+    expect(res.data.payload.iss).to.equal('acme.com');
+    expect(res.data.payload.sub).to.be.a('string');
+    expect(res.data.payload.authenticationType).to.equal('REFRESH_TOKEN');
+    expect(res.data.payload.email).to.equal('test@example.com');
+    expect(res.data.payload.email_verified).to.be.true;
+    expect(res.data.payload.applicationId).to.equal(applicationId);
+    expect(res.data.payload.roles).to.eql(['admin']);
+    refresh_token = res.data.refreshToken;
   });
 });
 

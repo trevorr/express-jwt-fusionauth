@@ -33,6 +33,14 @@ if [ ! -r $TMPDIR/api.key ]; then
   echo $TENANT_ID > $TMPDIR/tenant.id
   echo $API_KEY > $TMPDIR/api.key
 
+  curl -sSL -o /dev/null -X PATCH $FUSIONAUTH_URL/api/tenant/$TENANT_ID -H 'Content-Type: application/json' -H "Authorization: ${API_KEY}" -d '{
+    "tenant": {
+      "jwtConfiguration": {
+        "refreshTokenUsagePolicy": "OneTimeUse"
+      }
+    }
+  }'
+
 else
 
   TENANT_ID=$(cat $TMPDIR/tenant.id)

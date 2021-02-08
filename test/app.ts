@@ -39,6 +39,14 @@ app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: 
   const { jwt } = req;
   res.json({ jwt });
 });
+app.get('/refresh', async (req: express.Request, res) => {
+  try {
+    const result = await auth.refreshJwt(jwtOptions, req.cookies.refresh_token, req.cookies.access_token);
+    res.json(result);
+  } catch {
+    res.sendStatus(500);
+  }
+});
 app.get('/super', auth.jwt(jwtOptions), auth.jwtRole('super'), (req: express.Request, res) => {
   const { jwt } = req;
   res.json({ jwt });

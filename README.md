@@ -102,6 +102,7 @@ app.listen();
 * [ExpressJwtFusionAuth](#ExpressJwtFusionAuth)
     * [new ExpressJwtFusionAuth(fusionAuthUrl)](#new_ExpressJwtFusionAuth_new)
     * [.jwt(options)](#ExpressJwtFusionAuth+jwt)
+    * [.refreshJwt(options, refreshToken, token)](#ExpressJwtFusionAuth+refreshJwt)
     * [.jwtRole(roleOrRoles)](#ExpressJwtFusionAuth+jwtRole)
     * [.oauthCompletion(config)](#ExpressJwtFusionAuth+oauthCompletion)
 
@@ -129,6 +130,24 @@ or disabled for all clients.</p>
 | Param | Type | Description |
 | --- | --- | --- |
 | options | <code>JwtOptions</code> | <p>the JWT acquisition and verification options</p> |
+
+<a name="ExpressJwtFusionAuth+refreshJwt"></a>
+
+#### expressJwtFusionAuth.refreshJwt(options, refreshToken, token)
+<p>Requests and parses/validates a new JWT/access token using a refresh token
+obtained from a prior OAuth login or JWT refresh.
+Note that the middleware/handler returned by <code>jwt()</code> will do this automatically
+for an expired access token if a refresh token is available.
+This function is provided for cases where an application needs to refresh explicitly,
+such as when exchanging a FusionAuth JWT for an application-generated JWT.</p>
+
+**Kind**: instance method of [<code>ExpressJwtFusionAuth</code>](#ExpressJwtFusionAuth)  
+
+| Param | Description |
+| --- | --- |
+| options | <p>configuration options used for JWT verification</p> |
+| refreshToken | <p>the refresh token from the prior login or refresh</p> |
+| token | <p>the original, expired access token (for JWT Refresh webhook event)</p> |
 
 <a name="ExpressJwtFusionAuth+jwtRole"></a>
 
