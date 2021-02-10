@@ -108,7 +108,7 @@ const defaultJwtOptions: JwtOptions = {
 interface TokenResponse {
   access_token: string;
   expires_in: number;
-  id_token: string;
+  id_token?: string;
   refresh_token: string;
   token_type: string;
   userId: string;
@@ -232,7 +232,7 @@ export class ExpressJwtFusionAuth {
         } else {
           debug('Failing unauthenticated request');
           res.setHeader('WWW-Authenticate', 'Bearer');
-          this.fail(res, 401, 'Authorization required');
+          res.status(401).send('Authorization required');
         }
       } else {
         debug('Proceeding with unauthenticated request');
@@ -294,7 +294,7 @@ export class ExpressJwtFusionAuth {
         }
       }
       debug(`Failing request without JWT role(s): ${requiredRoles.join(', ')}`);
-      this.fail(res, 403, 'Not authorized');
+      res.status(403).send('Not authorized');
     };
   }
 
@@ -305,11 +305,18 @@ export class ExpressJwtFusionAuth {
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
     return async (req: express.Request, res: express.Response): Promise<void> => {
-      const {
-        query: { code, state }
-      } = req;
-      if (!code) {
-        this.fail(res, 400, 'Authorization code required');
+      let code, state;
+      if (req.method === 'GET') {
+        ({ code, state } = req.query);
+      } else if (req.body && typeof req.body === 'object') {
+        ({ code, state } = req.body);
+      }
+      if (typeof code !== 'string') {
+        this.oauthError(res, 'invalid_request', 'Authorization code required');
+        return;
+      }
+      if (state && typeof state !== 'string') {
+        this.oauthError(res, 'invalid_request', 'Invalid state value');
         return;
       }
       try {
@@ -328,23 +335,32 @@ export class ExpressJwtFusionAuth {
           ...defaultCookieConfig,
           ...config.cookieConfig
         };
-        res.cookie('access_token', data.access_token, cookieOptions);
-        if (data.refresh_token) {
-          res.cookie('refresh_token', data.refresh_token, cookieOptions);
-        }
         if (state) {
-          res.redirect(state as string);
+          res.cookie('access_token', data.access_token, cookieOptions);
+          if (data.refresh_token) {
+            res.cookie('refresh_token', data.refresh_token, cookieOptions);
+          }
+          res.redirect(state);
         } else {
-          res.sendStatus(204);
+          res.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').send(data);
         }
       } catch (err) {
-        debug(`Failed to exchange authorization code for token: ${err.message}`);
-        this.fail(res, err.response ? err.response.status : 500, 'Failed to exchange authorization code for token');
+        if (err.response) {
+          const { error = 'unknown_error', error_description } = err.response.data;
+          debug(`Failed to exchange authorization code for token: ${error_description || error}`);
+          this.oauthError(res, error, error_description, err.response.status);
+        } else {
+          debug(`Failed to exchange authorization code for token: ${err.message}`);
+          this.oauthError(res, 'internal_error', 'Failed to exchange authorization code for token', 500);
+        }
       }
     };
   }
 
-  protected fail(res: express.Response, statusCode: number, message: string): void {
-    res.status(statusCode).send(message);
+  protected oauthError(res: express.Response, code: string, description?: string, statusCode = 400): void {
+    res.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').status(statusCode).send({
+      error: code,
+      error_description: description
+    });
   }
 }

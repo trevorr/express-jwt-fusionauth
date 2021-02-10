@@ -123,6 +123,9 @@ describe('express-jwt-fusionauth', function () {
       await api.get('/oauth');
     } catch (err) {
       expect(err.response.status).to.equal(400);
+      expect(err.response.data).to.be.a('object');
+      expect(err.response.data.error).to.equal('invalid_request');
+      expect(err.response.data.error_description).to.equal('Authorization code required');
       return;
     }
     fail('rejection expected');
@@ -133,6 +136,9 @@ describe('express-jwt-fusionauth', function () {
       await api.get('/oauth?code=xxx');
     } catch (err) {
       expect(err.response.status).to.equal(400);
+      expect(err.response.data).to.be.a('object');
+      expect(err.response.data.error).to.equal('invalid_request');
+      expect(err.response.data.error_description).to.equal('Invalid Authorization Code');
       return;
     }
     fail('rejection expected');
@@ -151,17 +157,57 @@ describe('express-jwt-fusionauth', function () {
   });
 
   it('oauth completion succeeds with valid code', async () => {
-    const res = await api.get('/oauth', {
-      params: {
+    const res = await api.post(
+      '/oauth',
+      qs.stringify({
         code
+      }),
+      {
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded'
+        }
       }
-    });
-    expect(res.status).to.equal(204);
-    const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
-    expect(hasHttpOnlyCookies(res)).to.be.true;
-    access_token = cookies.access_token;
+    );
+    expect(res.status).to.equal(200);
+    expect(res.data).to.be.a('object');
+    expect(res.data.token_type).to.equal('Bearer');
+    expect(res.data.access_token).to.be.a('string');
+    expect(res.data.expires_in).to.be.a('number');
+    access_token = res.data.access_token;
+  });
+
+  it('oauth completion fails with invalid state', async () => {
+    try {
+      await api.get('/oauth', {
+        params: {
+          code,
+          state: ['is', 'an', 'array']
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(400);
+      expect(err.response.data).to.be.a('object');
+      expect(err.response.data.error).to.equal('invalid_request');
+      expect(err.response.data.error_description).to.equal('Invalid state value');
+      return;
+    }
+    fail('rejection expected');
+  });
+
+  it('oauth completion fails with invalid configuration', async () => {
+    try {
+      await api.get('/oauth-bad-config', {
+        params: {
+          code
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(500);
+      expect(err.response.data).to.be.a('object');
+      expect(err.response.data.error).to.equal('internal_error');
+      return;
+    }
+    fail('rejection expected');
   });
 
   it('oauth completion redirects to state', async () => {
@@ -191,13 +237,34 @@ describe('express-jwt-fusionauth', function () {
         code
       }
     });
-    expect(res.status).to.equal(204);
+    expect(res.status).to.equal(200);
+    expect(res.data).to.be.a('object');
+    expect(res.data.token_type).to.equal('Bearer');
+    expect(res.data.access_token).to.be.a('string');
+    expect(res.data.refresh_token).to.be.a('string');
+    expect(res.data.expires_in).to.be.a('number');
+    refresh_token = res.data.refresh_token;
+  });
+
+  it('oauth completion redirects to state with refresh token', async () => {
+    const code = await getAuthorizationCode({ scope: 'offline_access' });
+    const res = await api.get('/oauth', {
+      params: {
+        code,
+        state: '/my-redirect'
+      },
+      maxRedirects: 0,
+      validateStatus(status) {
+        return status < 400;
+      }
+    });
+    expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.refresh_token).to.be.a('string');
     expect(cookies.Domain).to.equal('app.domain');
     expect(hasHttpOnlyCookies(res)).to.be.true;
-    refresh_token = cookies.refresh_token;
+    expect(res.headers.location).to.equal('/my-redirect');
   });
 
   it('authenticated endpoint with Authorization Header Bearer token', async () => {
@@ -288,7 +355,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data).to.equal('nobody');
   });
 
-  it('authenticated endpoint with refresh_token cookie', async function() {
+  it('authenticated endpoint with refresh_token cookie', async function () {
     this.timeout(10000);
     await sleep(6000); // JWT timeToLiveInSeconds = 5
     const res = await api.get('/authed', {
@@ -316,7 +383,7 @@ describe('express-jwt-fusionauth', function () {
     refresh_token = cookies.refresh_token;
   });
 
-  it('authenticated endpoint with invalid refresh_token cookie', async function() {
+  it('authenticated endpoint with invalid refresh_token cookie', async function () {
     try {
       await api.get('/authed', {
         headers: {
@@ -330,7 +397,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('explicit refresh', async function() {
+  it('explicit refresh', async function () {
     this.timeout(10000);
     await sleep(6000); // JWT timeToLiveInSeconds = 5
     const res = await api.get('/refresh', {

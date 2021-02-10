@@ -1,3 +1,4 @@
+import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import { ExpressJwtFusionAuth } from '../src';
@@ -35,6 +36,8 @@ const app = express();
 app.use(cookieParser());
 app.get('/', (_, res) => res.send('OK'));
 app.get('/oauth', auth.oauthCompletion(oauthConfig));
+app.post('/oauth', bodyParser.urlencoded({ extended: true }), auth.oauthCompletion(oauthConfig));
+app.get('/oauth-bad-config', new ExpressJwtFusionAuth('http://localhost:99999').oauthCompletion(oauthConfig));
 app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: express.Request, res) => {
   const { jwt } = req;
   res.json({ jwt });
