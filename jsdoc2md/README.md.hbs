@@ -31,6 +31,7 @@ npm install express-jwt-fusionauth
 ## Sample Usage
 
 ```ts
+import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import express from 'express';
 import { ExpressJwtFusionAuth } from 'express-jwt-fusionauth';
@@ -74,6 +75,7 @@ app.use(cookieParser());
 // add a route corresponding to the OAuth redirect URI,
 // used to exchange an authorization code for a JWT/access token
 app.get('/oauth', auth.oauthCompletion(oauthConfig));
+app.post('/oauth', bodyParser.urlencoded({ extended: true }), auth.oauthCompletion(oauthConfig));
 
 // sample route requiring JWT authentication and the "root" or "admin" application role;
 // for demonstration purposes, it just dumps the JWT claims as JSON
