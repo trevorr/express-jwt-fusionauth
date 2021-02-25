@@ -71,12 +71,12 @@ describe('express-jwt-fusionauth', function () {
   this.timeout(10000);
   this.slow(2000);
 
-  it('health check', async () => {
+  it('health check', async function () {
     const res = await api.get('/');
     expect(res.status).to.equal(200);
   });
 
-  it('authenticated endpoint without JWT (non-browser)', async () => {
+  it('authenticated endpoint without JWT (non-browser)', async function () {
     try {
       await api.get('/authed');
     } catch (err) {
@@ -86,7 +86,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('authenticated endpoint without JWT (browser)', async () => {
+  it('authenticated endpoint without JWT (browser)', async function () {
     try {
       await api.get('/authed', {
         headers: {
@@ -104,7 +104,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('authenticated endpoint with invalid JWT (non-browser)', async () => {
+  it('authenticated endpoint with invalid JWT (non-browser)', async function () {
     try {
       await api.get('/authed', {
         headers: {
@@ -118,7 +118,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('oauth completion requires code', async () => {
+  it('oauth completion requires code', async function () {
     try {
       await api.get('/oauth');
     } catch (err) {
@@ -131,7 +131,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('oauth completion fails with invalid code', async () => {
+  it('oauth completion fails with invalid code', async function () {
     try {
       await api.get('/oauth?code=xxx');
     } catch (err) {
@@ -144,7 +144,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('oauth2/authorize', async () => {
+  it('oauth2/authorize', async function () {
     const res = await authorize();
     expect(res.status).to.equal(302);
     const redirect = new URL(res.headers.location);
@@ -156,7 +156,7 @@ describe('express-jwt-fusionauth', function () {
     expect(code).to.be.a('string');
   });
 
-  it('oauth completion succeeds with valid code', async () => {
+  it('oauth completion succeeds with valid code', async function () {
     const res = await api.post(
       '/oauth',
       qs.stringify({
@@ -176,7 +176,7 @@ describe('express-jwt-fusionauth', function () {
     access_token = res.data.access_token;
   });
 
-  it('oauth completion fails with invalid state', async () => {
+  it('oauth completion fails with invalid state', async function () {
     try {
       await api.get('/oauth', {
         params: {
@@ -194,7 +194,25 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('oauth completion fails with invalid configuration', async () => {
+  it('oauth completion fails with state if cookies are disabled', async function () {
+    try {
+      await api.get('/oauth-no-cookies', {
+        params: {
+          code,
+          state: '/my-redirect'
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(400);
+      expect(err.response.data).to.be.a('object');
+      expect(err.response.data.error).to.equal('invalid_request');
+      expect(err.response.data.error_description).to.equal('Cannot specify redirect state with cookies disabled');
+      return;
+    }
+    fail('rejection expected');
+  });
+
+  it('oauth completion fails with invalid configuration', async function () {
     try {
       await api.get('/oauth-bad-config', {
         params: {
@@ -210,7 +228,7 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('oauth completion redirects to state', async () => {
+  it('oauth completion redirects to state', async function () {
     const code = await getAuthorizationCode();
     const res = await api.get('/oauth', {
       params: {
@@ -230,7 +248,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.headers.location).to.equal('/my-redirect');
   });
 
-  it('oauth completion returns refresh token', async () => {
+  it('oauth completion returns refresh token', async function () {
     const code = await getAuthorizationCode({ scope: 'offline_access' });
     const res = await api.get('/oauth', {
       params: {
@@ -246,7 +264,7 @@ describe('express-jwt-fusionauth', function () {
     refresh_token = res.data.refresh_token;
   });
 
-  it('oauth completion redirects to state with refresh token', async () => {
+  it('oauth completion redirects to state with refresh token', async function () {
     const code = await getAuthorizationCode({ scope: 'offline_access' });
     const res = await api.get('/oauth', {
       params: {
@@ -267,7 +285,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.headers.location).to.equal('/my-redirect');
   });
 
-  it('authenticated endpoint with Authorization Header Bearer token', async () => {
+  it('authenticated endpoint with Authorization Header Bearer token', async function () {
     const res = await api.get('/authed', {
       headers: {
         Authorization: `Bearer ${access_token}`
@@ -286,7 +304,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
-  it('authenticated endpoint with access_token cookie', async () => {
+  it('authenticated endpoint with access_token cookie', async function () {
     const res = await api.get('/authed', {
       headers: {
         Cookie: `access_token=${access_token}`
@@ -305,7 +323,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
-  it('authenticated endpoint without required role', async () => {
+  it('authenticated endpoint without required role', async function () {
     try {
       await api.get('/super', {
         headers: {
@@ -319,13 +337,13 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('optionally authenticated endpoint without JWT', async () => {
+  it('optionally authenticated endpoint without JWT', async function () {
     const res = await api.get('/opt-authed');
     expect(res.status).to.equal(200);
     expect(res.data).to.equal('nobody');
   });
 
-  it('optionally authenticated endpoint with JWT', async () => {
+  it('optionally authenticated endpoint with JWT', async function () {
     const res = await api.get('/opt-authed', {
       headers: {
         Authorization: `Bearer ${access_token}`
@@ -335,7 +353,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data).to.equal('test@example.com');
   });
 
-  it('optionally authenticated endpoint with invalid JWT', async () => {
+  it('optionally authenticated endpoint with invalid JWT', async function () {
     const res = await api.get('/opt-authed', {
       headers: {
         Authorization: 'Bearer xxx'
@@ -345,7 +363,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data).to.equal('nobody');
   });
 
-  it('optionally authenticated endpoint with empty JWT', async () => {
+  it('optionally authenticated endpoint with empty JWT', async function () {
     const res = await api.get('/opt-authed', {
       headers: {
         Authorization: 'Bearer'
@@ -381,6 +399,21 @@ describe('express-jwt-fusionauth', function () {
     expect(cookies.Domain).to.equal('app.domain');
     expect(hasHttpOnlyCookies(res)).to.be.true;
     refresh_token = cookies.refresh_token;
+  });
+
+  it('authenticated endpoint with expired JWT and cookies disabled', async function () {
+    try {
+      await api.get('/authed-no-cookies', {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          Cookie: `refresh_token=${refresh_token}`
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(401);
+      return;
+    }
+    fail('rejection expected');
   });
 
   it('authenticated endpoint with invalid refresh_token cookie', async function () {

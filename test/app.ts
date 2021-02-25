@@ -36,12 +36,22 @@ const app = express();
 app.use(cookieParser());
 app.get('/', (_, res) => res.send('OK'));
 app.get('/oauth', auth.oauthCompletion(oauthConfig));
+app.get('/oauth-no-cookies', auth.oauthCompletion({ ...oauthConfig, cookieConfig: { disabled: true } }));
 app.post('/oauth', bodyParser.urlencoded({ extended: true }), auth.oauthCompletion(oauthConfig));
 app.get('/oauth-bad-config', new ExpressJwtFusionAuth('http://localhost:99999').oauthCompletion(oauthConfig));
 app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: express.Request, res) => {
   const { jwt } = req;
   res.json({ jwt });
 });
+app.get(
+  '/authed-no-cookies',
+  auth.jwt({ ...jwtOptions, cookieConfig: { disabled: true } }),
+  auth.jwtRole(['root', 'admin']),
+  (req: express.Request, res) => {
+    const { jwt } = req;
+    res.json({ jwt });
+  }
+);
 app.get('/refresh', async (req: express.Request, res) => {
   try {
     const result = await auth.refreshJwt(jwtOptions, req.cookies.refresh_token, req.cookies.access_token);

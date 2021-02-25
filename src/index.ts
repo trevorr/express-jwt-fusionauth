@@ -49,7 +49,9 @@ declare module 'express' {
 }
 
 /** Configuration for setting access and refresh token cookies. */
-export interface CookieConfig {
+export interface CookieConfig extends CookieOptions {
+  /** Disables the use of cookies for authentication. Recommended for cross-site use cases to avoid CSRF attacks. */
+  disabled?: boolean;
   /** Domain to associate with token cookies. */
   domain?: string;
   /** Whether to require token cookies only be sent in network requests and not be made available to scripts. Defaults to true. */
@@ -94,6 +96,7 @@ export interface RefreshJwtResult {
 
 /** @ignore */
 const defaultCookieConfig: CookieConfig = {
+  disabled: false,
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production'
 };
@@ -152,10 +155,17 @@ export class ExpressJwtFusionAuth {
    * @param {JwtOptions} options the JWT acquisition and verification options
    */
   public jwt(options: JwtOptions): express.RequestHandler {
-    const effectiveOptions = Object.assign({}, defaultJwtOptions, options);
+    const effectiveOptions = { ...defaultJwtOptions, ...options };
+    /* istanbul ignore next */
+    const { disabled: cookiesDisabled, ...cookieOptions } = {
+      ...defaultCookieConfig,
+      ...options.oauthConfig?.cookieConfig,
+      ...options.cookieConfig
+    };
     return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       let token;
       let tokenSource;
+      /* istanbul ignore next */
       const { headers = {}, cookies = {} } = req;
       if (headers.authorization) {
         const [scheme, credentials] = headers.authorization.split(' ');
@@ -163,7 +173,7 @@ export class ExpressJwtFusionAuth {
           token = credentials;
           tokenSource = 'Authorization header Bearer token';
         }
-      } else if (cookies.access_token) {
+      } else if (!cookiesDisabled && cookies.access_token) {
         token = cookies.access_token;
         tokenSource = 'access_token cookie';
       }
@@ -175,7 +185,7 @@ export class ExpressJwtFusionAuth {
             try {
               jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
             } catch (err) {
-              if (err instanceof JWTExpired && cookies.refresh_token) {
+              if (err instanceof JWTExpired && !cookiesDisabled && cookies.refresh_token) {
                 let refresh;
                 try {
                   refresh = await this.postRefresh(cookies.refresh_token, token);
@@ -187,12 +197,6 @@ export class ExpressJwtFusionAuth {
                 tokenSource = 'refresh_token cookie';
                 jwtPayload = (await jwtVerify(refresh.token, keyStore, effectiveOptions.verifyOptions)).payload;
 
-                const cookieOptions: CookieOptions = {
-                  domain: req.hostname,
-                  ...defaultCookieConfig,
-                  ...options.oauthConfig?.cookieConfig,
-                  ...options.cookieConfig
-                };
                 res.cookie('access_token', refresh.token, cookieOptions);
                 // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
                 res.cookie('refresh_token', refresh.refreshToken, cookieOptions);
@@ -202,6 +206,7 @@ export class ExpressJwtFusionAuth {
             }
             const jwt = jwtPayload as JwtClaims;
             req.jwt = jwt;
+            /* istanbul ignore next */
             debug(`Found valid JWT using ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
             return next();
           } catch (err) {
@@ -304,6 +309,7 @@ export class ExpressJwtFusionAuth {
    * @param {OAuthConfig} config the OAuth 2.0 configuration settings
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
+    const { disabled: cookiesDisabled, ...cookieOptions } = { ...defaultCookieConfig, ...config.cookieConfig };
     return async (req: express.Request, res: express.Response): Promise<void> => {
       let code, state;
       if (req.method === 'GET') {
@@ -315,9 +321,15 @@ export class ExpressJwtFusionAuth {
         this.oauthError(res, 'invalid_request', 'Authorization code required');
         return;
       }
-      if (state && typeof state !== 'string') {
-        this.oauthError(res, 'invalid_request', 'Invalid state value');
-        return;
+      if (state) {
+        if (typeof state !== 'string') {
+          this.oauthError(res, 'invalid_request', 'Invalid state value');
+          return;
+        }
+        if (cookiesDisabled) {
+          this.oauthError(res, 'invalid_request', 'Cannot specify redirect state with cookies disabled');
+          return;
+        }
       }
       try {
         const tokenRes = await this.fusionAuth.post('/oauth2/token', null, {
@@ -330,11 +342,6 @@ export class ExpressJwtFusionAuth {
           }
         });
         const data = tokenRes.data as TokenResponse;
-        const cookieOptions: CookieOptions = {
-          domain: req.hostname,
-          ...defaultCookieConfig,
-          ...config.cookieConfig
-        };
         if (state) {
           res.cookie('access_token', data.access_token, cookieOptions);
           if (data.refresh_token) {
