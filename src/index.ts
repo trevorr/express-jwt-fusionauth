@@ -1,11 +1,12 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import Debug from 'debug';
 import express, { CookieOptions } from 'express';
 import createRemoteJWKSet from 'jose/jwks/remote';
 import jwtVerify, { JWTPayload, JWTVerifyOptions } from 'jose/jwt/verify';
 import { JWTExpired } from 'jose/util/errors';
 import qs from 'qs';
 
-const debug = require('debug')('express-jwt-fusionauth');
+const debug = Debug('express-jwt-fusionauth');
 
 /**
  * JWT claims as defined by RFC 7519 and FusionAuth.
