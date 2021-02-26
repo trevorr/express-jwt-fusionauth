@@ -4,7 +4,7 @@
 [![CircleCI](https://img.shields.io/circleci/build/github/trevorr/express-jwt-fusionauth)](https://circleci.com/gh/trevorr/express-jwt-fusionauth)
 
 [Express](https://expressjs.com/) middleware for JSON Web Token ([JWT](https://jwt.io/))-based
-authentication against [FusionAuth](https://fusionauth.io/). It provides three main functions:
+authentication against [FusionAuth](https://fusionauth.io/). It provides these main functions:
 
 * Find, parse, and verify a JWT, and attach its claims to the Express request, optionally
   requiring that it be present.\
@@ -14,6 +14,8 @@ authentication against [FusionAuth](https://fusionauth.io/). It provides three m
 * Check that the JWT has at least one of a set of application-defined roles.
 * Implement the [redirection endpoint](https://tools.ietf.org/html/rfc6749#section-3.1.2)
   that exchanges an OAuth authorization code for a JWT.
+* In addition to obtaining and verifying a JWT from FusionAuth, the middlware can also issue
+  and verify application-defined JWTs. This allows application-specific claims to be included.
 
 While most of the mechanics of JWT ([RFC 7519](https://tools.ietf.org/html/rfc7519)) and
 OAuth 2.0 ([RFC 6749](https://tools.ietf.org/html/rfc6749)) are standard across identity
@@ -104,7 +106,7 @@ app.listen();
 * [ExpressJwtFusionAuth](#ExpressJwtFusionAuth)
     * [new ExpressJwtFusionAuth(fusionAuthUrl)](#new_ExpressJwtFusionAuth_new)
     * [.jwt(options)](#ExpressJwtFusionAuth+jwt)
-    * [.refreshJwt(options, refreshToken, token)](#ExpressJwtFusionAuth+refreshJwt)
+    * [.refreshJwt(refreshToken, oldToken, context)](#ExpressJwtFusionAuth+refreshJwt)
     * [.jwtRole(roleOrRoles)](#ExpressJwtFusionAuth+jwtRole)
     * [.oauthCompletion(config)](#ExpressJwtFusionAuth+oauthCompletion)
 
@@ -135,7 +137,7 @@ or disabled for all clients.</p>
 
 <a name="ExpressJwtFusionAuth+refreshJwt"></a>
 
-#### expressJwtFusionAuth.refreshJwt(options, refreshToken, token)
+#### expressJwtFusionAuth.refreshJwt(refreshToken, oldToken, context)
 <p>Requests and parses/validates a new JWT/access token using a refresh token
 obtained from a prior OAuth login or JWT refresh.
 Note that the middleware/handler returned by <code>jwt()</code> will do this automatically
@@ -147,9 +149,9 @@ such as when exchanging a FusionAuth JWT for an application-generated JWT.</p>
 
 | Param | Description |
 | --- | --- |
-| options | <p>configuration options used for JWT verification</p> |
 | refreshToken | <p>the refresh token from the prior login or refresh</p> |
-| token | <p>the original, expired access token (for JWT Refresh webhook event)</p> |
+| oldToken | <p>the original, expired access token (for JWT Refresh webhook event)</p> |
+| context | <p>the refresh context, optionally containing JWT transform options and Express request/response</p> |
 
 <a name="ExpressJwtFusionAuth+jwtRole"></a>
 

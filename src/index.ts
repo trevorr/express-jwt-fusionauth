@@ -3,6 +3,7 @@ import Debug from 'debug';
 import express, { CookieOptions } from 'express';
 import createRemoteJWKSet from 'jose/jwks/remote';
 import jwtVerify, { JWTPayload, JWTVerifyOptions } from 'jose/jwt/verify';
+import { decode as base64Decode } from 'jose/util/base64url';
 import { JWTExpired } from 'jose/util/errors';
 import qs from 'qs';
 
@@ -53,13 +54,58 @@ declare module 'express' {
 export interface CookieConfig extends CookieOptions {
   /** Disables the use of cookies for authentication. Recommended for cross-site use cases to avoid CSRF attacks. */
   disabled?: boolean;
-  /** Domain to associate with token cookies. */
-  domain?: string;
   /** Whether to require token cookies only be sent in network requests and not be made available to scripts. Defaults to true. */
   httpOnly?: boolean;
   /** Whether to require token cookies only be sent over a secure connection. Defaults to whether `NODE_ENV` is `production`. */
   secure?: boolean;
 }
+
+/** Context provided to an application JWT verification function. */
+export interface JwtVerifierContext {
+  /** The JWT options provided to the middleware. */
+  options: JwtOptions;
+  /** The Express request that provided the JWT being verified. */
+  request: express.Request;
+  /** The Express response associated with the request of the JWT being verified. */
+  response: express.Response;
+}
+
+/**
+ * Verification function for application-issued JWT tokens.
+ * Returns the JWT claims if the token represents a valid application JWT or false if the JWT is
+ * not an application JWT, indicating the token should be verified using the FusionAuth key set
+ * and configured verification options. If the token is an invalid application JWT, an exception
+ * (such as `jose` `JWTInvalid` or `JWTExpired`) should be thrown. If `jose` `JWTExpired` is thrown,
+ * cookies are enabled, and a refresh token is provided, an automatic refresh will be attempted.
+ * @param {string} token the JWT token to verify
+ * @param {JwtVerifierContext} context the verification context, including options, request, and response
+ */
+export type JwtVerifier = (token: string, context: JwtVerifierContext) => Promise<JwtClaims | false>;
+
+/** A JWT token and its corresponding payload. */
+export interface JwtTokenAndPayload {
+  /** A verified JWT token. */
+  token: string;
+  /** The decoded claims contained in the JWT. */
+  payload: JwtClaims;
+}
+
+/** Context provided to an application JWT transform function. */
+export interface JwtTransformContext {
+  /** The JWT options provided to the middleware. */
+  options?: JwtOptions;
+  /** The Express request that provided the JWT being transformed. */
+  request?: express.Request;
+  /** The Express response associated with the request of the JWT being transformed. */
+  response?: express.Response;
+}
+
+/**
+ * JWT transform function allowing an application to replace the FusionAuth JWT with its own.
+ * @param {JwtTokenAndPayload} jwt the verified FusionAuth JWT token and payload
+ * @param {JwtVerifierContext} context the transform context, optionally including options, request, and response
+ */
+export type JwtTransform = (jwt: JwtTokenAndPayload, context: JwtTransformContext) => Promise<JwtTokenAndPayload>;
 
 /** Configuration for OAuth 2.0 (RFC 6749) authentication flow. */
 export interface OAuthConfig {
@@ -71,6 +117,8 @@ export interface OAuthConfig {
   redirectUri: string;
   /** Cookie configuration used for setting access and refresh token cookies after OAuth completion. */
   cookieConfig?: CookieConfig;
+  /** JWT transform function allowing an application to replace the FusionAuth JWT with its own after OAuth completion. */
+  jwtTransform?: JwtTransform;
 }
 
 /** Options controlling how to obtain and verify a JWT. */
@@ -87,6 +135,10 @@ export interface JwtOptions {
   oauthConfig?: OAuthConfig;
   /** Cookie configuration used for setting access token cookie after refresh. Uses OAuth cookie configuration by default. */
   cookieConfig?: CookieConfig;
+  /** JWT transform function allowing an application to replace the FusionAuth JWT with its own. Uses OAuth JWT transform by default. */
+  jwtTransform?: JwtTransform;
+  /** JWT verification function for application-issued tokens. */
+  jwtVerifier?: JwtVerifier;
 }
 
 export interface RefreshJwtResult {
@@ -140,7 +192,7 @@ export class ExpressJwtFusionAuth {
     });
   }
 
-  protected getJWKS(): JWKS {
+  private getJWKS(): JWKS {
     if (!this.jwks) {
       this.jwks = createRemoteJWKSet(new URL(`${this.fusionAuthUrl}/.well-known/jwks.json`));
     }
@@ -164,8 +216,8 @@ export class ExpressJwtFusionAuth {
       ...options.cookieConfig
     };
     return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
-      let token;
-      let tokenSource;
+      let token: string | undefined;
+      let tokenSource: string | undefined;
       /* istanbul ignore next */
       const { headers = {}, cookies = {} } = req;
       if (headers.authorization) {
@@ -182,9 +234,18 @@ export class ExpressJwtFusionAuth {
         try {
           const keyStore = this.getJWKS();
           try {
-            let jwtPayload;
+            let payload: JwtClaims | false | undefined;
             try {
-              jwtPayload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload;
+              if (effectiveOptions.jwtVerifier) {
+                payload = await effectiveOptions.jwtVerifier(token, {
+                  options: effectiveOptions,
+                  request: req,
+                  response: res
+                });
+              }
+              if (!payload) {
+                payload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
+              }
             } catch (err) {
               if (err instanceof JWTExpired && !cookiesDisabled && cookies.refresh_token) {
                 let refresh;
@@ -195,20 +256,32 @@ export class ExpressJwtFusionAuth {
                   throw err;
                 }
 
+                token = refresh.token;
                 tokenSource = 'refresh_token cookie';
-                jwtPayload = (await jwtVerify(refresh.token, keyStore, effectiveOptions.verifyOptions)).payload;
+                payload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
 
-                res.cookie('access_token', refresh.token, cookieOptions);
+                /* istanbul ignore next */
+                const jwtTransform = effectiveOptions.jwtTransform || effectiveOptions.oauthConfig?.jwtTransform;
+                if (jwtTransform) {
+                  ({ token, payload } = await jwtTransform(
+                    { token, payload },
+                    {
+                      options: effectiveOptions,
+                      request: req,
+                      response: res
+                    }
+                  ));
+                }
+
+                res.cookie('access_token', token, cookieOptions);
                 // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
                 res.cookie('refresh_token', refresh.refreshToken, cookieOptions);
               } else {
                 throw err;
               }
             }
-            const jwt = jwtPayload as JwtClaims;
-            req.jwt = jwt;
-            /* istanbul ignore next */
-            debug(`Found valid JWT using ${tokenSource} for ${jwt.email || jwt.preferred_username || jwt.sub}`);
+            req.jwt = payload;
+            debug(`Found valid JWT using ${tokenSource} for ${payload.sub}`);
             return next();
           } catch (err) {
             debug(`Invalid JWT provided by ${tokenSource}: ${err.message}`);
@@ -254,15 +327,29 @@ export class ExpressJwtFusionAuth {
    * for an expired access token if a refresh token is available.
    * This function is provided for cases where an application needs to refresh explicitly,
    * such as when exchanging a FusionAuth JWT for an application-generated JWT.
-   * @param options configuration options used for JWT verification
    * @param refreshToken the refresh token from the prior login or refresh
-   * @param token the original, expired access token (for JWT Refresh webhook event)
+   * @param oldToken the original, expired access token (for JWT Refresh webhook event)
+   * @param context the refresh context, optionally containing JWT transform options and Express request/response
    */
-  public async refreshJwt(options: JwtOptions, refreshToken: string, token?: string): Promise<RefreshJwtResult> {
-    const { token: newToken, refreshToken: newRefreshToken } = await this.postRefresh(refreshToken, token);
-    const keyStore = this.getJWKS();
-    const jwtPayload = (await jwtVerify(newToken, keyStore, options.verifyOptions)).payload;
-    return { token: newToken, refreshToken: newRefreshToken, payload: jwtPayload as JwtClaims };
+  public async refreshJwt(
+    refreshToken: string,
+    oldToken?: string,
+    context?: JwtTransformContext
+  ): Promise<RefreshJwtResult> {
+    const refresh = await this.postRefresh(refreshToken, oldToken);
+    let token = refresh.token;
+    let payload = this.decodeTrustedJwt(token);
+
+    if (context?.options) {
+      const jwtTransform =
+        context.options.jwtTransform || /* istanbul ignore next */ context.options.oauthConfig?.jwtTransform;
+      /* istanbul ignore else */
+      if (jwtTransform) {
+        ({ token, payload } = await jwtTransform({ token, payload }, context));
+      }
+    }
+
+    return { token, refreshToken: refresh.refreshToken, payload };
   }
 
   private async postRefresh(refreshToken: string, token?: string): Promise<RefreshResponse> {
@@ -271,6 +358,7 @@ export class ExpressJwtFusionAuth {
       return res.data;
     } catch (err) {
       let { message } = err;
+      /* istanbul ignore else */
       if (err.response) {
         const res = err.response as AxiosResponse;
         message = `HTTP ${res.status}: ${JSON.stringify(res.data)}`;
@@ -292,6 +380,7 @@ export class ExpressJwtFusionAuth {
     const requiredRoles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
     return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       const { jwt } = req;
+      /* istanbul ignore else */
       if (jwt && Array.isArray(jwt.roles)) {
         const jwtRoles = jwt.roles;
         if (requiredRoles.some(role => jwtRoles.includes(role))) {
@@ -315,9 +404,10 @@ export class ExpressJwtFusionAuth {
       let code, state;
       if (req.method === 'GET') {
         ({ code, state } = req.query);
-      } else if (req.body && typeof req.body === 'object') {
+      } /* istanbul ignore else */ else if (req.body && typeof req.body === 'object') {
         ({ code, state } = req.body);
       }
+
       if (typeof code !== 'string') {
         this.oauthError(res, 'invalid_request', 'Authorization code required');
         return;
@@ -332,6 +422,7 @@ export class ExpressJwtFusionAuth {
           return;
         }
       }
+
       try {
         const tokenRes = await this.fusionAuth.post('/oauth2/token', null, {
           params: {
@@ -343,6 +434,21 @@ export class ExpressJwtFusionAuth {
           }
         });
         const data = tokenRes.data as TokenResponse;
+
+        if (config.jwtTransform) {
+          let token = data.access_token;
+          let payload = this.decodeTrustedJwt(token);
+          ({ token, payload } = await config.jwtTransform(
+            { token, payload },
+            {
+              options: { oauthConfig: config },
+              request: req,
+              response: res
+            }
+          ));
+          data.access_token = token;
+        }
+
         if (state) {
           res.cookie('access_token', data.access_token, cookieOptions);
           if (data.refresh_token) {
@@ -354,8 +460,10 @@ export class ExpressJwtFusionAuth {
         }
       } catch (err) {
         if (err.response) {
+          /* istanbul ignore next */
           const { error = 'unknown_error', error_description } = err.response.data;
-          debug(`Failed to exchange authorization code for token: ${error_description || error}`);
+          const message = error_description || /* istanbul ignore next */ error;
+          debug(`Failed to exchange authorization code for token: ${message}`);
           this.oauthError(res, error, error_description, err.response.status);
         } else {
           debug(`Failed to exchange authorization code for token: ${err.message}`);
@@ -365,7 +473,13 @@ export class ExpressJwtFusionAuth {
     };
   }
 
-  protected oauthError(res: express.Response, code: string, description?: string, statusCode = 400): void {
+  private decodeTrustedJwt(token: string): JwtClaims {
+    // https://github.com/panva/jose/discussions/106#discussioncomment-210262
+    const utf8Decoder = new TextDecoder();
+    return JSON.parse(utf8Decoder.decode(base64Decode(token.split('.')[1])));
+  }
+
+  private oauthError(res: express.Response, code: string, description?: string, statusCode = 400): void {
     res.header('Cache-Control', 'no-store').header('Pragma', 'no-cache').status(statusCode).send({
       error: code,
       error_description: description

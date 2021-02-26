@@ -4,7 +4,7 @@
 [![CircleCI](https://img.shields.io/circleci/build/github/trevorr/express-jwt-fusionauth)](https://circleci.com/gh/trevorr/express-jwt-fusionauth)
 
 [Express](https://expressjs.com/) middleware for JSON Web Token ([JWT](https://jwt.io/))-based
-authentication against [FusionAuth](https://fusionauth.io/). It provides three main functions:
+authentication against [FusionAuth](https://fusionauth.io/). It provides these main functions:
 
 * Find, parse, and verify a JWT, and attach its claims to the Express request, optionally
   requiring that it be present.\
@@ -14,6 +14,8 @@ authentication against [FusionAuth](https://fusionauth.io/). It provides three m
 * Check that the JWT has at least one of a set of application-defined roles.
 * Implement the [redirection endpoint](https://tools.ietf.org/html/rfc6749#section-3.1.2)
   that exchanges an OAuth authorization code for a JWT.
+* In addition to obtaining and verifying a JWT from FusionAuth, the middlware can also issue
+  and verify application-defined JWTs. This allows application-specific claims to be included.
 
 While most of the mechanics of JWT ([RFC 7519](https://tools.ietf.org/html/rfc7519)) and
 OAuth 2.0 ([RFC 6749](https://tools.ietf.org/html/rfc6749)) are standard across identity
