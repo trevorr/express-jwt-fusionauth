@@ -22,3 +22,9 @@ jobs:
           name: Start containers and run tests against them
           command: |
             ./scripts/test.sh
+      - store_test_results:
+          path: test-results
+      - store_artifacts:
+          path: test-results/mocha/mocha.xml
+      - store_artifacts:
+          path: coverage
