@@ -1,4 +1,6 @@
-version: 2
+version: 2.1
+orbs:
+  coveralls: coveralls/coveralls@1.0.6
 jobs:
   build:
     docker:
@@ -28,3 +30,4 @@ jobs:
           path: test-results/mocha/mocha.xml
       - store_artifacts:
           path: coverage
+      - coveralls/upload
