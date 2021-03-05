@@ -293,7 +293,7 @@ export class ExpressJwtFusionAuth {
       } else {
         debug('No JWT provided in Authorization header or access_token cookie');
       }
-      if (effectiveOptions.required) {
+      if (effectiveOptions.required || !!token) {
         if (
           (effectiveOptions.alwaysLogin ||
             (effectiveOptions.browserLogin && headers.accept && /^text\/html,/i.test(headers.accept))) &&

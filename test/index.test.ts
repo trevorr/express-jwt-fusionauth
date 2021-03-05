@@ -397,7 +397,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data).to.equal('nobody');
   });
 
-  it('optionally authenticated endpoint with JWT', async function () {
+  it('optionally authenticated endpoint with valid JWT', async function () {
     const res = await api.get('/opt-authed', {
       headers: {
         Authorization: `Bearer ${access_token}`
@@ -408,13 +408,17 @@ describe('express-jwt-fusionauth', function () {
   });
 
   it('optionally authenticated endpoint with invalid JWT', async function () {
-    const res = await api.get('/opt-authed', {
-      headers: {
-        Authorization: 'Bearer xxx'
-      }
-    });
-    expect(res.status).to.equal(200);
-    expect(res.data).to.equal('nobody');
+    try {
+      await api.get('/opt-authed', {
+        headers: {
+          Authorization: 'Bearer xxx'
+        }
+      });
+    } catch (err) {
+      expect(err.response.status).to.equal(401);
+      return;
+    }
+    fail('rejection expected');
   });
 
   it('optionally authenticated endpoint with empty JWT', async function () {
