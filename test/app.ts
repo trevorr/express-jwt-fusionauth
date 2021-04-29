@@ -59,7 +59,12 @@ app.use(cookieParser());
 app.get('/', (_, res) => res.send('OK'));
 app.get('/oauth', auth.oauthCompletion(oauthConfig));
 app.get('/oauth-app-jwt', auth.oauthCompletion({ ...oauthConfig, jwtTransform }));
+app.get('/oauth-query', auth.oauthCompletion({ ...oauthConfig, tokenTransport: 'query' }));
 app.get('/oauth-no-cookies', auth.oauthCompletion({ ...oauthConfig, cookieConfig: { disabled: true } }));
+app.get(
+  '/oauth-no-state',
+  auth.oauthCompletion({ ...oauthConfig, tokenTransport: 'cookie', cookieConfig: { disabled: true } })
+);
 app.post('/oauth', bodyParser.urlencoded({ extended: true }), auth.oauthCompletion(oauthConfig));
 app.get('/oauth-bad-config', new ExpressJwtFusionAuth('http://localhost:99999').oauthCompletion(oauthConfig));
 app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: express.Request, res) => {

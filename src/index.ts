@@ -115,6 +115,11 @@ export interface OAuthConfig {
   clientSecret?: string;
   /** URI of the endpoint that will exchange an authorization code for a JWT. */
   redirectUri: string;
+  /**
+   * How to pass tokens during redirect: as cookies or URL query parameters.
+   * Defaults to 'cookie' if those are enabled, otherwise 'query'.
+   */
+  tokenTransport?: 'cookie' | 'query';
   /** Cookie configuration used for setting access and refresh token cookies after OAuth completion. */
   cookieConfig?: CookieConfig;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own after OAuth completion. */
@@ -400,6 +405,7 @@ export class ExpressJwtFusionAuth {
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
     const { disabled: cookiesDisabled, ...cookieOptions } = { ...defaultCookieConfig, ...config.cookieConfig };
+    const { tokenTransport = cookiesDisabled ? 'query' : 'cookie' } = config;
     return async (req: express.Request, res: express.Response): Promise<void> => {
       let code, state;
       if (req.method === 'GET') {
@@ -417,7 +423,7 @@ export class ExpressJwtFusionAuth {
           this.oauthError(res, 'invalid_request', 'Invalid state value');
           return;
         }
-        if (cookiesDisabled) {
+        if (cookiesDisabled && tokenTransport === 'cookie') {
           this.oauthError(res, 'invalid_request', 'Cannot specify redirect state with cookies disabled');
           return;
         }
@@ -449,10 +455,21 @@ export class ExpressJwtFusionAuth {
           data.access_token = token;
         }
 
-        if (state) {
-          res.cookie('access_token', data.access_token, cookieOptions);
-          if (data.refresh_token) {
-            res.cookie('refresh_token', data.refresh_token, cookieOptions);
+        if (typeof state === 'string') {
+          switch (tokenTransport) {
+            case 'cookie':
+              res.cookie('access_token', data.access_token, cookieOptions);
+              if (data.refresh_token) {
+                res.cookie('refresh_token', data.refresh_token, cookieOptions);
+              }
+              break;
+            case 'query':
+              const delim = state.indexOf('?') >= 0 ? '&' : '?';
+              state += `${delim}access_token=${encodeURIComponent(data.access_token)}`;
+              if (data.refresh_token) {
+                state += `&refresh_token=${encodeURIComponent(data.refresh_token)}`;
+              }
+              break;
           }
           res.redirect(state);
         } else {
