@@ -117,9 +117,10 @@ export interface OAuthConfig {
   redirectUri: string;
   /**
    * How to pass tokens during redirect: as cookies or URL query parameters.
-   * Defaults to 'cookie' if those are enabled, otherwise 'query'.
+   * Defaults to 'auto', which uses cookies if enabled and if state does not contain a `token_transport`
+   * query parameter with the value 'query', otherwise uses query parameters.
    */
-  tokenTransport?: 'cookie' | 'query';
+  tokenTransport?: 'auto' | 'cookie' | 'query';
   /** Cookie configuration used for setting access and refresh token cookies after OAuth completion. */
   cookieConfig?: CookieConfig;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own after OAuth completion. */
@@ -405,7 +406,6 @@ export class ExpressJwtFusionAuth {
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
     const { disabled: cookiesDisabled, ...cookieOptions } = { ...defaultCookieConfig, ...config.cookieConfig };
-    const { tokenTransport = cookiesDisabled ? 'query' : 'cookie' } = config;
     return async (req: express.Request, res: express.Response): Promise<void> => {
       let code, state;
       if (req.method === 'GET') {
@@ -418,12 +418,34 @@ export class ExpressJwtFusionAuth {
         this.oauthError(res, 'invalid_request', 'Authorization code required');
         return;
       }
+
+      let { tokenTransport = 'auto' } = config;
+      let stateParams: URLSearchParams | undefined;
+      let baseState: string | undefined;
+      let paramsChanged = false;
       if (state) {
         if (typeof state !== 'string') {
           this.oauthError(res, 'invalid_request', 'Invalid state value');
           return;
         }
-        if (cookiesDisabled && tokenTransport === 'cookie') {
+
+        const paramsStart = state.indexOf('?');
+        stateParams = new URLSearchParams(paramsStart >= 0 ? state.substring(paramsStart + 1) : undefined);
+        baseState = paramsStart >= 0 ? state.substring(0, paramsStart) : state;
+
+        const tokenParam = stateParams.get('token_transport');
+        if (tokenParam) {
+          stateParams.delete('token_transport');
+          paramsChanged = true;
+        }
+
+        if (tokenTransport === 'auto') {
+          if (cookiesDisabled || tokenParam === 'query') {
+            tokenTransport = 'query';
+          } else {
+            tokenTransport = 'cookie';
+          }
+        } else if (cookiesDisabled && tokenTransport === 'cookie') {
           this.oauthError(res, 'invalid_request', 'Cannot specify redirect state with cookies disabled');
           return;
         }
@@ -455,7 +477,7 @@ export class ExpressJwtFusionAuth {
           data.access_token = token;
         }
 
-        if (typeof state === 'string') {
+        if (stateParams && typeof state === 'string') {
           switch (tokenTransport) {
             case 'cookie':
               res.cookie('access_token', data.access_token, cookieOptions);
@@ -464,12 +486,15 @@ export class ExpressJwtFusionAuth {
               }
               break;
             case 'query':
-              const delim = state.indexOf('?') >= 0 ? '&' : '?';
-              state += `${delim}access_token=${encodeURIComponent(data.access_token)}`;
+              stateParams.set('access_token', data.access_token);
               if (data.refresh_token) {
-                state += `&refresh_token=${encodeURIComponent(data.refresh_token)}`;
+                stateParams.set('refresh_token', data.refresh_token);
               }
+              paramsChanged = true;
               break;
+          }
+          if (paramsChanged) {
+            state = stateParams.entries().next().done ? baseState! : `${baseState}?${stateParams}`;
           }
           res.redirect(state);
         } else {

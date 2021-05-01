@@ -266,6 +266,26 @@ describe('express-jwt-fusionauth', function () {
     expect(res.headers.location).to.equal('/my-redirect');
   });
 
+  it('oauth completion redirects to state with cookies using explicit token_transport', async function () {
+    const code = await getAuthorizationCode();
+    const res = await api.get('/oauth', {
+      params: {
+        code,
+        state: '/my-redirect?token_transport=cookie'
+      },
+      maxRedirects: 0,
+      validateStatus(status) {
+        return status < 400;
+      }
+    });
+    expect(res.status).to.equal(302);
+    const cookies = getCookies(res);
+    expect(cookies.access_token).to.be.a('string');
+    expect(cookies.Domain).to.equal('app.domain');
+    expect(hasHttpOnlyCookies(res)).to.be.true;
+    expect(res.headers.location).to.equal('/my-redirect');
+  });
+
   it('oauth completion redirects to state with query parameters', async function () {
     const code = await getAuthorizationCode();
     const res = await api.get('/oauth-query', {
@@ -300,6 +320,24 @@ describe('express-jwt-fusionauth', function () {
     const cookies = getCookies(res);
     expect(Object.keys(cookies)).to.have.length(0);
     expect(res.headers.location).to.match(/\/my-redirect\?q=x&access_token=[\w.-]+/);
+  });
+
+  it('oauth completion redirects to state with query parameters using token_transport override', async function () {
+    const code = await getAuthorizationCode();
+    const res = await api.get('/oauth', {
+      params: {
+        code,
+        state: '/my-redirect?token_transport=query'
+      },
+      maxRedirects: 0,
+      validateStatus(status) {
+        return status < 400;
+      }
+    });
+    expect(res.status).to.equal(302);
+    const cookies = getCookies(res);
+    expect(Object.keys(cookies)).to.have.length(0);
+    expect(res.headers.location).to.match(/\/my-redirect\?access_token=[\w.-]+/);
   });
 
   it('oauth completion returns refresh token', async function () {
