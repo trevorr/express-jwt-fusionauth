@@ -2,7 +2,7 @@
 
 set -e
 
-docker-compose up --build -d
+docker compose up --build -d
 docker exec -t express-jwt-fusionauth_app ./scripts/configure-and-test.sh
 rm -rf coverage test-results
 docker cp express-jwt-fusionauth_app:/home/node/app/coverage coverage
