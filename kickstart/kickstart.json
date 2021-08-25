@@ -45,7 +45,7 @@
             "clientSecret": "#{testClientSecret}",
             "requireClientAuthentication": true,
             "authorizedRedirectURLs": [
-              "http://localhost:3000/oauth"
+              "#{testRedirectUrl}"
             ],
             "enabledGrants": [
               "authorization_code",
