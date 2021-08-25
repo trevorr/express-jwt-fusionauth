@@ -16,17 +16,6 @@ const {
   FUSIONAUTH_URL
 } = process.env;
 
-console.log({
-  APP_COOKIE_DOMAIN,
-  APP_JWT_ISSUER,
-  APP_URL,
-  FUSIONAUTH_ADMIN_EMAIL,
-  FUSIONAUTH_ADMIN_PASSWORD,
-  FUSIONAUTH_APPLICATION_ID,
-  FUSIONAUTH_TENANT_ISSUER,
-  FUSIONAUTH_URL
-});
-
 const api = axios.create({ baseURL: APP_URL });
 
 let code: string | null;
