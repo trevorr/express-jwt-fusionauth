@@ -1,0 +1,80 @@
+{
+  "variables": {
+    "defaultTenantId": "#{ENV.FUSIONAUTH_TENANT_ID}",
+    "defaultTenantIssuer": "#{ENV.FUSIONAUTH_TENANT_ISSUER}",
+    "testApplicationId": "#{ENV.FUSIONAUTH_APPLICATION_ID}",
+    "testClientSecret": "#{ENV.FUSIONAUTH_APPLICATION_CLIENT_SECRET}",
+    "testRedirectUrl": "#{ENV.FUSIONAUTH_APPLICATION_REDIRECT_URL}",
+    "adminUserId": "#{ENV.FUSIONAUTH_ADMIN_USER_ID}",
+    "adminEmail": "#{ENV.FUSIONAUTH_ADMIN_EMAIL}",
+    "adminPassword": "#{ENV.FUSIONAUTH_ADMIN_PASSWORD}"
+  },
+  "apiKeys": [
+    {
+      "key": "#{ENV.FUSIONAUTH_API_KEY}"
+    }
+  ],
+  "requests": [
+    {
+      "method": "PATCH",
+      "url": "/api/tenant/#{defaultTenantId}",
+      "body": {
+        "tenant": {
+          "issuer": "#{defaultTenantIssuer}",
+          "jwtConfiguration": {
+            "refreshTokenUsagePolicy": "OneTimeUse"
+          }
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/application/#{testApplicationId}",
+      "body": {
+        "application": {
+          "name": "Test Application",
+          "jwtConfiguration": {
+            "enabled": true,
+            "refreshTokenTimeToLiveInMinutes": 43200,
+            "timeToLiveInSeconds": 5
+          },
+          "loginConfiguration": {
+            "allowTokenRefresh": true
+          },
+          "oauthConfiguration": {
+            "clientSecret": "#{testClientSecret}",
+            "requireClientAuthentication": true,
+            "authorizedRedirectURLs": [
+              "http://localhost:3000/oauth"
+            ],
+            "enabledGrants": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "generateRefreshTokens": true
+          },
+          "roles": [
+            {
+              "name": "admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "user": {
+          "email": "#{adminEmail}",
+          "password": "#{adminPassword}"
+        },
+        "registration": {
+          "applicationId": "#{testApplicationId}",
+          "roles": ["admin"],
+          "username": "test"
+        }
+      }
+    }
+  ]
+}

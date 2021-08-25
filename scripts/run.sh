@@ -3,10 +3,7 @@
 set -e
 
 echo "Waiting for FusionAuth"
-curl -sS -o /dev/null --retry 10 --retry-connrefused http://fusionauth:9011
-
-echo "Configuring FusionAuth"
-$(dirname $BASH_SOURCE)/configure.sh
+curl -sS -o /dev/null --retry 10 --retry-connrefused -H "Authorization: ${FUSIONAUTH_API_KEY}" "${FUSIONAUTH_URL}/api/user/${FUSIONAUTH_ADMIN_USER_ID}"
 
 echo "Waiting for test server"
 curl -sS -o /dev/null --retry 10 --retry-connrefused http://app:3000

@@ -4,21 +4,23 @@ import express from 'express';
 import UnsecuredJWT from 'jose/jwt/unsecured';
 import { ExpressJwtFusionAuth, JwtClaims, JwtOptions, JwtTransform, JwtVerifier, OAuthConfig } from '../src';
 
-const { FUSIONAUTH_URL = 'http://fusionauth:9011' } = process.env;
-const { JWT_ISSUER = 'acme.com' } = process.env;
-const { APP_JWT_ISSUER = 'example.com' } = process.env;
-const { OAUTH_CLIENT_ID = '31d7b8e8-f67e-4fb0-9c0b-872b793cda7a' } = process.env;
-const { OAUTH_CLIENT_SECRET = 'VYKsyjndsJ7lTnS2Z5vuz4SM-8Dvy1-4_yvqEoALMfY' } = process.env;
-const { OAUTH_REDIRECT_URI = 'http://localhost:3000/oauth' } = process.env;
-const { OAUTH_COOKIE_DOMAIN = 'app.domain' } = process.env;
-const { PORT = '3000' } = process.env;
+const {
+  APP_COOKIE_DOMAIN,
+  APP_JWT_ISSUER,
+  FUSIONAUTH_APPLICATION_CLIENT_SECRET,
+  FUSIONAUTH_APPLICATION_ID,
+  FUSIONAUTH_APPLICATION_REDIRECT_URL,
+  FUSIONAUTH_TENANT_ISSUER,
+  FUSIONAUTH_URL,
+  PORT = '3000'
+} = process.env;
 
 const oauthConfig: OAuthConfig = {
-  clientId: OAUTH_CLIENT_ID,
-  clientSecret: OAUTH_CLIENT_SECRET,
-  redirectUri: OAUTH_REDIRECT_URI,
+  clientId: FUSIONAUTH_APPLICATION_ID!,
+  clientSecret: FUSIONAUTH_APPLICATION_CLIENT_SECRET,
+  redirectUri: FUSIONAUTH_APPLICATION_REDIRECT_URL!,
   cookieConfig: {
-    domain: OAUTH_COOKIE_DOMAIN
+    domain: APP_COOKIE_DOMAIN
   }
 };
 
@@ -28,13 +30,13 @@ const jwtOptions: JwtOptions = {
   alwaysLogin: false,
   browserLogin: true,
   verifyOptions: {
-    issuer: JWT_ISSUER,
-    audience: OAUTH_CLIENT_ID
+    issuer: FUSIONAUTH_TENANT_ISSUER,
+    audience: FUSIONAUTH_APPLICATION_ID
   }
 };
 
 const jwtTransform: JwtTransform = async ({ token, payload }) => {
-  payload = { ...payload, iss: APP_JWT_ISSUER };
+  payload = { ...payload, iss: APP_JWT_ISSUER! };
   token = new UnsecuredJWT(payload).encode();
   return { token, payload };
 };
@@ -53,7 +55,7 @@ const jwtVerifier: JwtVerifier = async token => {
 
 const appJwtOptions = { ...jwtOptions, jwtTransform, jwtVerifier };
 
-const auth = new ExpressJwtFusionAuth(FUSIONAUTH_URL);
+const auth = new ExpressJwtFusionAuth(FUSIONAUTH_URL!);
 const app = express();
 app.use(cookieParser());
 app.get('/', (_, res) => res.send('OK'));

@@ -5,11 +5,16 @@ import cookie from 'cookie';
 import UnsecuredJWT from 'jose/jwt/unsecured';
 import qs from 'qs';
 
-const { FUSIONAUTH_URL = 'http://fusionauth:9011' } = process.env;
-const { JWT_ISSUER = 'acme.com' } = process.env;
-const { APP_JWT_ISSUER = 'example.com' } = process.env;
-const { OAUTH_CLIENT_ID = '31d7b8e8-f67e-4fb0-9c0b-872b793cda7a' } = process.env;
-const { APP_URL = 'http://localhost:3000' } = process.env;
+const {
+  APP_COOKIE_DOMAIN,
+  APP_JWT_ISSUER,
+  APP_URL,
+  FUSIONAUTH_ADMIN_EMAIL,
+  FUSIONAUTH_ADMIN_PASSWORD,
+  FUSIONAUTH_APPLICATION_ID,
+  FUSIONAUTH_TENANT_ISSUER,
+  FUSIONAUTH_URL
+} = process.env;
 
 const api = axios.create({ baseURL: APP_URL });
 
@@ -26,12 +31,12 @@ function authorize(options: AuthorizeOptions = {}): Promise<AxiosResponse<void>>
   return api.post(
     `${FUSIONAUTH_URL}/oauth2/authorize`,
     qs.stringify({
-      client_id: OAUTH_CLIENT_ID,
+      client_id: FUSIONAUTH_APPLICATION_ID,
       redirect_uri: `${APP_URL}/oauth`,
       response_type: 'code',
       state: '/authed',
-      loginId: 'test@example.com',
-      password: 'test1234',
+      loginId: FUSIONAUTH_ADMIN_EMAIL,
+      password: FUSIONAUTH_ADMIN_PASSWORD,
       ...options
     }),
     {
@@ -102,7 +107,7 @@ describe('express-jwt-fusionauth', function () {
     } catch (err) {
       expect(err.response.status).to.equal(302);
       expect(err.response.headers.location).to.equal(
-        `${FUSIONAUTH_URL}/oauth2/authorize?client_id=${OAUTH_CLIENT_ID}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Foauth&response_type=code&state=%2Fauthed`
+        `${FUSIONAUTH_URL}/oauth2/authorize?client_id=${FUSIONAUTH_APPLICATION_ID}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Foauth&response_type=code&state=%2Fauthed`
       );
       return;
     }
@@ -261,7 +266,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
   });
@@ -281,7 +286,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
   });
@@ -372,7 +377,7 @@ describe('express-jwt-fusionauth', function () {
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.refresh_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
   });
@@ -419,15 +424,15 @@ describe('express-jwt-fusionauth', function () {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.jwt.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.exp).to.be.a('number');
     expect(res.data.jwt.iat).to.be.a('number');
-    expect(res.data.jwt.iss).to.equal(JWT_ISSUER);
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
     expect(res.data.jwt.sub).to.be.a('string');
     expect(res.data.jwt.authenticationType).to.equal('PASSWORD');
     expect(res.data.jwt.email).to.equal('test@example.com');
     expect(res.data.jwt.email_verified).to.be.true;
-    expect(res.data.jwt.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
@@ -438,15 +443,15 @@ describe('express-jwt-fusionauth', function () {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.jwt.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.exp).to.be.a('number');
     expect(res.data.jwt.iat).to.be.a('number');
-    expect(res.data.jwt.iss).to.equal(JWT_ISSUER);
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
     expect(res.data.jwt.sub).to.be.a('string');
     expect(res.data.jwt.authenticationType).to.equal('PASSWORD');
     expect(res.data.jwt.email).to.equal('test@example.com');
     expect(res.data.jwt.email_verified).to.be.true;
-    expect(res.data.jwt.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
@@ -457,7 +462,7 @@ describe('express-jwt-fusionauth', function () {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.jwt.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.exp).to.be.a('number');
     expect(res.data.jwt.iat).to.be.a('number');
     expect(res.data.jwt.iss).to.equal(APP_JWT_ISSUER);
@@ -465,7 +470,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.authenticationType).to.equal('PASSWORD');
     expect(res.data.jwt.email).to.equal('test@example.com');
     expect(res.data.jwt.email_verified).to.be.true;
-    expect(res.data.jwt.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
@@ -532,21 +537,21 @@ describe('express-jwt-fusionauth', function () {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.jwt.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.exp).to.be.a('number');
     expect(res.data.jwt.iat).to.be.a('number');
-    expect(res.data.jwt.iss).to.equal(JWT_ISSUER);
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
     expect(res.data.jwt.sub).to.be.a('string');
     expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
     expect(res.data.jwt.email).to.equal('test@example.com');
     expect(res.data.jwt.email_verified).to.be.true;
-    expect(res.data.jwt.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.access_token).to.not.equal(access_token);
     expect(cookies.refresh_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     refresh_token = cookies.refresh_token;
   });
@@ -558,7 +563,7 @@ describe('express-jwt-fusionauth', function () {
       }
     });
     expect(res.status).to.equal(200);
-    expect(res.data.jwt.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.exp).to.be.a('number');
     expect(res.data.jwt.iat).to.be.a('number');
     expect(res.data.jwt.iss).to.equal(APP_JWT_ISSUER);
@@ -566,13 +571,13 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
     expect(res.data.jwt.email).to.equal('test@example.com');
     expect(res.data.jwt.email_verified).to.be.true;
-    expect(res.data.jwt.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
     const cookies = getCookies(res);
     expect(cookies.access_token).to.be.a('string');
     expect(cookies.access_token).to.not.equal(access_token);
     expect(cookies.refresh_token).to.be.a('string');
-    expect(cookies.Domain).to.equal('app.domain');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     refresh_token = cookies.refresh_token;
   });
@@ -618,15 +623,15 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.token).to.be.a('string');
     expect(res.data.token).to.not.equal(access_token);
     expect(res.data.refreshToken).to.be.a('string');
-    expect(res.data.payload.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.payload.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.exp).to.be.a('number');
     expect(res.data.payload.iat).to.be.a('number');
-    expect(res.data.payload.iss).to.equal(JWT_ISSUER);
+    expect(res.data.payload.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
     expect(res.data.payload.sub).to.be.a('string');
     expect(res.data.payload.authenticationType).to.equal('REFRESH_TOKEN');
     expect(res.data.payload.email).to.equal('test@example.com');
     expect(res.data.payload.email_verified).to.be.true;
-    expect(res.data.payload.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.payload.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.roles).to.eql(['admin']);
     refresh_token = res.data.refreshToken;
   });
@@ -645,7 +650,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.token).to.be.a('string');
     expect(res.data.token).to.not.equal(access_token);
     expect(res.data.refreshToken).to.be.a('string');
-    expect(res.data.payload.aud).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.payload.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.exp).to.be.a('number');
     expect(res.data.payload.iat).to.be.a('number');
     expect(res.data.payload.iss).to.equal(APP_JWT_ISSUER);
@@ -653,7 +658,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.payload.authenticationType).to.equal('REFRESH_TOKEN');
     expect(res.data.payload.email).to.equal('test@example.com');
     expect(res.data.payload.email_verified).to.be.true;
-    expect(res.data.payload.applicationId).to.equal(OAUTH_CLIENT_ID);
+    expect(res.data.payload.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.roles).to.eql(['admin']);
     refresh_token = res.data.refreshToken;
   });
