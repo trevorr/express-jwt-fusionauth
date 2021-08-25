@@ -12,7 +12,7 @@ COPY --chown=node:node package*.json ./
 COPY --chown=node:node tsconfig.json ./
 COPY --chown=node:node src ./src/
 COPY --chown=node:node jsdoc2md ./jsdoc2md/
-RUN npm install
+RUN npm ci
 
 COPY --chown=node:node scripts ./scripts/
 COPY --chown=node:node test ./test/
