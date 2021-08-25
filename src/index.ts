@@ -347,8 +347,8 @@ export class ExpressJwtFusionAuth {
     let payload = this.decodeTrustedJwt(token);
 
     if (context?.options) {
-      const jwtTransform =
-        context.options.jwtTransform || /* istanbul ignore next */ context.options.oauthConfig?.jwtTransform;
+      /* istanbul ignore next */
+      const jwtTransform = context.options.jwtTransform || context.options.oauthConfig?.jwtTransform;
       /* istanbul ignore else */
       if (jwtTransform) {
         ({ token, payload } = await jwtTransform({ token, payload }, context));
@@ -410,8 +410,11 @@ export class ExpressJwtFusionAuth {
       let code, state;
       if (req.method === 'GET') {
         ({ code, state } = req.query);
-      } /* istanbul ignore else */ else if (req.body && typeof req.body === 'object') {
-        ({ code, state } = req.body);
+      } else {
+        /* istanbul ignore else */
+        if (req.body && typeof req.body === 'object') {
+          ({ code, state } = req.body);
+        }
       }
 
       if (typeof code !== 'string') {
