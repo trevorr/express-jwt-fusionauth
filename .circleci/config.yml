@@ -3,24 +3,13 @@ orbs:
   coveralls: coveralls/coveralls@1.0.6
 jobs:
   build:
-    docker:
-      - image: circleci/node:fermium
+    machine:
+      image: ubuntu-2004:202107-02
 
     working_directory: ~/repo
 
     steps:
-      - run:
-          name: Install Docker Compose
-          command: |
-            curl -L https://github.com/docker/compose/releases/download/1.29.2/docker-compose-`uname -s`-`uname -m` > ~/docker-compose
-            chmod +x ~/docker-compose
-            sudo mv ~/docker-compose /usr/local/bin/docker-compose
-
-      - setup_remote_docker:
-          version: 20.10.6
-
       - checkout
-
       - run:
           name: Start containers and run tests against them
           command: |
