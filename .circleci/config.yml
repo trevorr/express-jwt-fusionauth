@@ -1,6 +1,4 @@
 version: 2.1
-orbs:
-  coveralls: coveralls/coveralls@1.0.6
 jobs:
   build:
     machine:
@@ -20,4 +18,9 @@ jobs:
           path: test-results/mocha/mocha.xml
       - store_artifacts:
           path: coverage
-      - coveralls/upload
+      - run:
+          name: Upload to coveralls
+          command: |
+            npm install -g coveralls
+            export COVERALLS_ENDPOINT=https://coveralls.io
+            cat ./coverage/lcov.info | coveralls
