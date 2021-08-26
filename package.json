@@ -1,6 +1,6 @@
 {
   "name": "express-jwt-fusionauth",
-  "version": "4.0.3",
+  "version": "4.1.0",
   "description": "Express middleware for JWT-based authentication against FusionAuth",
   "keywords": [
     "express",
@@ -51,7 +51,6 @@
   },
   "dependencies": {
     "axios": "^0.21.1",
-    "debug": "^4.3.2",
     "express": "^4.17.1",
     "jose": "^3.15.4",
     "qs": "^6.10.1"
@@ -75,6 +74,7 @@
     "chai": "^4.3.4",
     "cookie": "^0.4.1",
     "cookie-parser": "^1.4.5",
+    "debug": "^4.3.2",
     "eslint": "^7.32.0",
     "eslint-plugin-promise": "^5.1.0",
     "husky": "^7.0.2",

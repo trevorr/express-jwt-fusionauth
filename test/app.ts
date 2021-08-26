@@ -3,6 +3,7 @@ import cookieParser from 'cookie-parser';
 import express from 'express';
 import UnsecuredJWT from 'jose/jwt/unsecured';
 import { ExpressJwtFusionAuth, JwtClaims, JwtOptions, JwtTransform, JwtVerifier, OAuthConfig } from '../src';
+import { getDefaultLogger } from '../src/logger';
 
 const {
   APP_COOKIE_DOMAIN,
@@ -53,7 +54,7 @@ const jwtVerifier: JwtVerifier = async token => {
   return jwt.payload as JwtClaims;
 };
 
-const appJwtOptions = { ...jwtOptions, jwtTransform, jwtVerifier };
+const appJwtOptions = { ...jwtOptions, jwtTransform, jwtVerifier, logger: getDefaultLogger() };
 
 const auth = new ExpressJwtFusionAuth(FUSIONAUTH_URL!);
 const app = express();
