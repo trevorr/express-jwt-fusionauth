@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance } from 'axios';
+import { asError } from 'catch-unknown';
 import express, { CookieOptions } from 'express';
 import createRemoteJWKSet from 'jose/jwks/remote';
 import jwtVerify, { JWTPayload, JWTVerifyOptions } from 'jose/jwt/verify';
@@ -169,13 +170,17 @@ const defaultJwtOptions: JwtOptions = {
   browserLogin: true
 };
 
-interface TokenResponse {
+export interface OAuthTokenResponse {
   access_token: string;
   expires_in: number;
   id_token?: string;
   refresh_token: string;
   token_type: string;
   userId: string;
+}
+export interface OAuthErrorResponse {
+  error?: string;
+  error_description?: string;
 }
 
 interface RefreshResponse {
@@ -294,11 +299,11 @@ export class ExpressJwtFusionAuth {
             logger.debug(`Found valid JWT using ${tokenSource} for ${payload.sub}`);
             return next();
           } catch (err) {
-            logger.debug(`Invalid JWT provided by ${tokenSource}: ${err.message}`);
+            logger.debug(`Invalid JWT provided by ${tokenSource}: ${asError(err).message}`);
           }
         } catch (err) {
           /* istanbul ignore next */
-          logger.error(`Error fetching keys to verify JWT: ${err.message}`);
+          logger.error(`Error fetching keys to verify JWT: ${asError(err).message}`);
         }
       } else {
         logger.debug('No JWT provided in Authorization header or access_token cookie');
@@ -368,11 +373,13 @@ export class ExpressJwtFusionAuth {
       const res = await this.fusionAuth.post<RefreshResponse>('/api/jwt/refresh', { refreshToken, token });
       return res.data;
     } catch (err) {
-      let { message } = err;
+      let message;
       /* istanbul ignore else */
-      if (err.response) {
-        const res = err.response as AxiosResponse;
-        message = `HTTP ${res.status}: ${JSON.stringify(res.data)}`;
+      if (axios.isAxiosError(err) && err.response) {
+        const { response } = err;
+        message = `HTTP ${response.status}: ${JSON.stringify(response.data)}`;
+      } else {
+        ({ message } = asError(err));
       }
       logger.debug(`Failed to refresh token: ${message}`);
       throw err;
@@ -474,7 +481,7 @@ export class ExpressJwtFusionAuth {
             redirect_uri: config.redirectUri
           }
         });
-        const data = tokenRes.data as TokenResponse;
+        const data = tokenRes.data as OAuthTokenResponse;
 
         let jwtSource;
         if (config.jwtTransform) {
@@ -525,14 +532,14 @@ export class ExpressJwtFusionAuth {
           `Completed OAuth with ${jwtSource} JWT${data.refresh_token ? ' and refresh token' : ''} via ${jwtVia}`
         );
       } catch (err) {
-        if (err.response) {
+        if (axios.isAxiosError(err) && err.response && isOAuthErrorResponse(err.response.data)) {
           /* istanbul ignore next */
           const { error = 'unknown_error', error_description } = err.response.data;
           const message = error_description || /* istanbul ignore next */ error;
           logger.debug(`Failed to exchange authorization code for token: ${message}`);
           this.oauthError(res, error, error_description, err.response.status);
         } else {
-          logger.debug(`Failed to exchange authorization code for token: ${err.message}`);
+          logger.debug(`Failed to exchange authorization code for token: ${asError(err).message}`);
           this.oauthError(res, 'internal_error', 'Failed to exchange authorization code for token', 500);
         }
       }
@@ -551,4 +558,16 @@ export class ExpressJwtFusionAuth {
       error_description: description
     });
   }
+}
+
+export function isOAuthErrorResponse(v: unknown): v is OAuthErrorResponse {
+  return (
+    isRecord(v) &&
+    (!('error' in v) || typeof v.error === 'string') &&
+    (!('error_description' in v) || typeof v.error_description === 'string')
+  );
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v != null;
 }

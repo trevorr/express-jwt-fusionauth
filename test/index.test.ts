@@ -1,9 +1,10 @@
-import { fail } from 'assert';
+import assert, { fail } from 'assert';
 import axios, { AxiosResponse } from 'axios';
 import { expect } from 'chai';
 import cookie from 'cookie';
 import UnsecuredJWT from 'jose/jwt/unsecured';
 import qs from 'qs';
+import { isOAuthErrorResponse } from '../src';
 
 const {
   APP_COOKIE_DOMAIN,
@@ -90,6 +91,7 @@ describe('express-jwt-fusionauth', function () {
     try {
       await api.get('/authed');
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(401);
       return;
     }
@@ -105,6 +107,7 @@ describe('express-jwt-fusionauth', function () {
         maxRedirects: 0
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(302);
       expect(err.response.headers.location).to.equal(
         `${FUSIONAUTH_URL}/oauth2/authorize?client_id=${FUSIONAUTH_APPLICATION_ID}&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Foauth&response_type=code&state=%2Fauthed`
@@ -122,6 +125,7 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(401);
       return;
     }
@@ -132,8 +136,9 @@ describe('express-jwt-fusionauth', function () {
     try {
       await api.get('/oauth');
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(400);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('invalid_request');
       expect(err.response.data.error_description).to.equal('Authorization code required');
       return;
@@ -145,8 +150,9 @@ describe('express-jwt-fusionauth', function () {
     try {
       await api.post('/oauth', 'meh', { headers: { 'Content-Type': 'text/plain' } });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(400);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('invalid_request');
       expect(err.response.data.error_description).to.equal('Authorization code required');
       return;
@@ -158,8 +164,9 @@ describe('express-jwt-fusionauth', function () {
     try {
       await api.get('/oauth?code=xxx');
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(400);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('invalid_request');
       expect(err.response.data.error_description).to.equal('Invalid Authorization Code');
       return;
@@ -208,8 +215,9 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(400);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('invalid_request');
       expect(err.response.data.error_description).to.equal('Invalid state value');
       return;
@@ -226,8 +234,9 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(400);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('invalid_request');
       expect(err.response.data.error_description).to.equal('Cannot specify redirect state with cookies disabled');
       return;
@@ -243,8 +252,9 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(500);
-      expect(err.response.data).to.be.a('object');
+      assert(isOAuthErrorResponse(err.response.data));
       expect(err.response.data.error).to.equal('internal_error');
       return;
     }
@@ -482,6 +492,7 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(403);
       return;
     }
@@ -512,6 +523,7 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(401);
       return;
     }
@@ -591,6 +603,7 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(401);
       return;
     }
@@ -605,6 +618,7 @@ describe('express-jwt-fusionauth', function () {
         }
       });
     } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
       expect(err.response.status).to.equal(401);
       return;
     }
@@ -661,6 +675,15 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.payload.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.roles).to.eql(['admin']);
     refresh_token = res.data.refreshToken;
+  });
+
+  it('handles invalid OAuthError responses', function () {
+    expect(isOAuthErrorResponse(undefined)).to.be.false;
+    expect(isOAuthErrorResponse({})).to.be.true;
+    expect(isOAuthErrorResponse({ error: '' })).to.be.true;
+    expect(isOAuthErrorResponse({ error: 0 })).to.be.false;
+    expect(isOAuthErrorResponse({ error_description: '' })).to.be.true;
+    expect(isOAuthErrorResponse({ error_description: 0 })).to.be.false;
   });
 });
 
