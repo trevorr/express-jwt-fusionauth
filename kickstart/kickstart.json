@@ -36,6 +36,7 @@
           "jwtConfiguration": {
             "enabled": true,
             "refreshTokenTimeToLiveInMinutes": 43200,
+            "refreshTokenUsagePolicy": "OneTimeUse",
             "timeToLiveInSeconds": 5
           },
           "loginConfiguration": {
@@ -69,6 +70,17 @@
           "email": "#{adminEmail}",
           "password": "#{adminPassword}"
         },
+        "registration": {
+          "applicationId": "#{FUSIONAUTH_APPLICATION_ID}",
+          "roles": ["admin"],
+          "username": "admin"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
         "registration": {
           "applicationId": "#{testApplicationId}",
           "roles": ["admin"],

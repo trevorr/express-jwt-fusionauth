@@ -99,6 +99,22 @@ app.get(
     res.json({ jwt });
   }
 );
+app.get(
+  '/authed-header-refresh',
+  auth.jwt({
+    ...jwtOptions,
+    headerConfig: {
+      refreshTokenHeader: 'refresh-token',
+      refreshedAccessTokenHeader: 'new-access-token',
+      refreshedRefreshTokenHeader: 'new-refresh-token'
+    }
+  }),
+  auth.jwtRole(['root', 'admin']),
+  (req: express.Request, res) => {
+    const { jwt } = req;
+    res.json({ jwt });
+  }
+);
 app.get('/refresh', async (req: express.Request, res) => {
   try {
     const result = await auth.refreshJwt(req.cookies[APP_REFRESH_TOKEN_COOKIE], req.cookies[APP_ACCESS_TOKEN_COOKIE]);

@@ -631,6 +631,86 @@ describe('express-jwt-fusionauth', function () {
     refreshToken = cookies[APP_REFRESH_TOKEN_COOKIE];
   });
 
+  it('authenticated endpoint supporting refresh headers but using refresh token cookie', async function () {
+    const res = await api.get('/authed-header-refresh', {
+      headers: {
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
+      }
+    });
+    expect(res.status).to.equal(200);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.roles).to.eql(['admin']);
+    const cookies = getCookies(res);
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.not.equal(accessToken);
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
+    expect(hasHttpOnlyCookies(res)).to.be.true;
+    refreshToken = cookies[APP_REFRESH_TOKEN_COOKIE];
+  });
+
+  it('authenticated endpoint with refresh token header', async function () {
+    const res = await api.get('/authed-header-refresh', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Refresh-Token': refreshToken
+      }
+    });
+    expect(res.status).to.equal(200);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.roles).to.eql(['admin']);
+    const cookies = getCookies(res);
+    expect(Object.keys(cookies)).to.have.length(0);
+    expect(res.headers['new-access-token']).to.be.a('string');
+    expect(res.headers['new-access-token']).to.not.equal(accessToken);
+    expect(res.headers['new-refresh-token']).to.be.a('string');
+    refreshToken = res.headers['new-refresh-token'];
+  });
+
+  it('authenticated endpoint with access token header and refresh token cookie', async function () {
+    const res = await api.get('/authed-header-refresh', {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Cookie: `${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
+      }
+    });
+    expect(res.status).to.equal(200);
+    expect(res.data.jwt.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.exp).to.be.a('number');
+    expect(res.data.jwt.iat).to.be.a('number');
+    expect(res.data.jwt.iss).to.equal(FUSIONAUTH_TENANT_ISSUER);
+    expect(res.data.jwt.sub).to.be.a('string');
+    expect(res.data.jwt.authenticationType).to.equal('REFRESH_TOKEN');
+    expect(res.data.jwt.email).to.equal('test@example.com');
+    expect(res.data.jwt.email_verified).to.be.true;
+    expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
+    expect(res.data.jwt.roles).to.eql(['admin']);
+    const cookies = getCookies(res);
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
+    expect(hasHttpOnlyCookies(res)).to.be.true;
+    expect(res.headers['new-access-token']).to.be.a('string');
+    expect(res.headers['new-access-token']).to.not.equal(accessToken);
+    expect(res.headers['new-refresh-token']).to.be.undefined;
+    refreshToken = cookies[APP_REFRESH_TOKEN_COOKIE];
+  });
+
   it('authenticated endpoint with refresh token cookie and application JWT', async function () {
     const res = await api.get('/authed-app-jwt', {
       headers: {

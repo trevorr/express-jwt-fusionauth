@@ -135,6 +135,16 @@ export interface OAuthConfig {
   logger?: Logger;
 }
 
+/** Configuration for how access and refresh tokens are exchanged via headers. */
+export interface TokenHeaderConfig {
+  /** Request header used to provide a refresh token used for automatic refresh. */
+  refreshTokenHeader?: string;
+  /** Response header used to provide an updated access token after automatic refresh. */
+  refreshedAccessTokenHeader?: string;
+  /** Response header used to provide an updated refresh token after automatic refresh. */
+  refreshedRefreshTokenHeader?: string;
+}
+
 /** Options controlling how to obtain and verify a JWT. */
 export interface JwtOptions {
   /** JWT verification options passed to `jose` `jwtVerify`. */
@@ -153,6 +163,8 @@ export interface JwtOptions {
   accessTokenCookieConfig?: NamedCookieConfig;
   /** Cookie configuration used for setting the refresh token cookie after OAuth completion. */
   refreshTokenCookieConfig?: NamedCookieConfig;
+  /** Request/response header configuration. */
+  headerConfig?: TokenHeaderConfig;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own. Uses OAuth JWT transform by default. */
   jwtTransform?: JwtTransform;
   /** JWT verification function for application-issued tokens. */
@@ -277,6 +289,22 @@ export class ExpressJwtFusionAuth {
         token = cookies[accessTokenCookieName];
         tokenSource = `${accessTokenCookieName} cookie`;
       }
+
+      let refreshToken: string | undefined;
+      let refreshTokenSource: string | undefined;
+      if (effectiveOptions.headerConfig?.refreshTokenHeader) {
+        const headerName = effectiveOptions.headerConfig.refreshTokenHeader;
+        const headerValue = headers[headerName];
+        if (typeof headerValue === 'string') {
+          refreshToken = headerValue;
+          refreshTokenSource = `${headerName} header`;
+        }
+      }
+      if (!refreshToken && !refreshTokenCookieDisabled && cookies[refreshTokenCookieName]) {
+        refreshToken = cookies[refreshTokenCookieName];
+        refreshTokenSource = `${refreshTokenCookieName} cookie`;
+      }
+
       if (token) {
         try {
           const keyStore = this.getJWKS();
@@ -294,24 +322,26 @@ export class ExpressJwtFusionAuth {
                 payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
               }
             } catch (err) {
-              // refresh expired JWT automatically if both token cookies are enabled and provided
+              // refresh expired JWT automatically if we have a way to return the new access token
+              const refreshedAccessTokenHeader = effectiveOptions.headerConfig?.refreshedAccessTokenHeader;
+              const refreshedRefreshTokenHeader = effectiveOptions.headerConfig?.refreshedRefreshTokenHeader;
               if (
                 err instanceof jose.errors.JWTExpired &&
-                !accessTokenCookieDisabled &&
-                !refreshTokenCookieDisabled &&
-                cookies[accessTokenCookieName] &&
-                cookies[refreshTokenCookieName]
+                refreshToken &&
+                refreshTokenSource &&
+                (refreshedAccessTokenHeader || !accessTokenCookieDisabled) &&
+                (refreshedRefreshTokenHeader || !refreshTokenCookieDisabled)
               ) {
                 let refresh;
                 try {
-                  refresh = await this.postRefresh(logger, cookies[refreshTokenCookieName], token);
+                  refresh = await this.postRefresh(logger, refreshToken, token);
                 } catch {
                   // rethrow original error if refresh fails
                   throw err;
                 }
 
                 token = refresh.token;
-                tokenSource = `${refreshTokenCookieName} cookie`;
+                tokenSource = refreshTokenSource;
                 payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
 
                 /* istanbul ignore next */
@@ -327,9 +357,27 @@ export class ExpressJwtFusionAuth {
                   ));
                 }
 
-                res.cookie(accessTokenCookieName, token, accessTokenCookieConfig);
+                if (refreshedAccessTokenHeader && headers.authorization) {
+                  res.setHeader(refreshedAccessTokenHeader, token);
+                } else {
+                  /* istanbul ignore else */
+                  if (!accessTokenCookieDisabled) {
+                    res.cookie(accessTokenCookieName, token, accessTokenCookieConfig);
+                  }
+                }
+
                 // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
-                res.cookie(refreshTokenCookieName, refresh.refreshToken, refreshTokenCookieConfig);
+                /* istanbul ignore else */
+                if (refresh.refreshToken !== refreshToken) {
+                  if (refreshedRefreshTokenHeader && refreshTokenSource.endsWith('header')) {
+                    res.setHeader(refreshedRefreshTokenHeader, refresh.refreshToken);
+                  } else {
+                    /* istanbul ignore else */
+                    if (!refreshTokenCookieDisabled) {
+                      res.cookie(refreshTokenCookieName, refresh.refreshToken, refreshTokenCookieConfig);
+                    }
+                  }
+                }
               } else {
                 throw err;
               }
