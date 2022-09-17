@@ -7,6 +7,8 @@ import { getDefaultLogger } from '../src/logger';
 
 const {
   APP_COOKIE_DOMAIN,
+  APP_ACCESS_TOKEN_COOKIE = 'the_access_token',
+  APP_REFRESH_TOKEN_COOKIE = 'the_refresh_token',
   APP_JWT_ISSUER,
   FUSIONAUTH_APPLICATION_CLIENT_SECRET,
   FUSIONAUTH_APPLICATION_ID,
@@ -22,6 +24,12 @@ const oauthConfig: OAuthConfig = {
   redirectUri: FUSIONAUTH_APPLICATION_REDIRECT_URL!,
   cookieConfig: {
     domain: APP_COOKIE_DOMAIN
+  },
+  accessTokenCookieConfig: {
+    name: APP_ACCESS_TOKEN_COOKIE
+  },
+  refreshTokenCookieConfig: {
+    name: APP_REFRESH_TOKEN_COOKIE
   }
 };
 
@@ -65,6 +73,10 @@ app.get('/oauth-app-jwt', auth.oauthCompletion({ ...oauthConfig, jwtTransform })
 app.get('/oauth-query', auth.oauthCompletion({ ...oauthConfig, tokenTransport: 'query' }));
 app.get('/oauth-no-cookies', auth.oauthCompletion({ ...oauthConfig, cookieConfig: { disabled: true } }));
 app.get(
+  '/oauth-no-access-token-cookie',
+  auth.oauthCompletion({ ...oauthConfig, accessTokenCookieConfig: { name: APP_ACCESS_TOKEN_COOKIE, disabled: true } })
+);
+app.get(
   '/oauth-no-state',
   auth.oauthCompletion({ ...oauthConfig, tokenTransport: 'cookie', cookieConfig: { disabled: true } })
 );
@@ -89,7 +101,7 @@ app.get(
 );
 app.get('/refresh', async (req: express.Request, res) => {
   try {
-    const result = await auth.refreshJwt(req.cookies.refresh_token, req.cookies.access_token);
+    const result = await auth.refreshJwt(req.cookies[APP_REFRESH_TOKEN_COOKIE], req.cookies[APP_ACCESS_TOKEN_COOKIE]);
     res.json(result);
   } catch {
     res.sendStatus(500);

@@ -48,12 +48,18 @@ declare module 'express' {
 
 /** Configuration for setting access and refresh token cookies. */
 export interface CookieConfig extends CookieOptions {
-  /** Disables the use of cookies for authentication. Recommended for cross-site use cases to avoid CSRF attacks. */
+  /** Disables the use of cookies for authentication. Recommended unless CSRF mitigation is used. */
   disabled?: boolean;
   /** Whether to require token cookies only be sent in network requests and not be made available to scripts. Defaults to true. */
   httpOnly?: boolean;
   /** Whether to require token cookies only be sent over a secure connection. Defaults to whether `NODE_ENV` is `production`. */
   secure?: boolean;
+}
+
+/** Configuration for setting a specific cookie. */
+export interface NamedCookieConfig extends CookieConfig {
+  /** The name of the cookie. Defaults to `access_token` or `refresh_token`. */
+  name?: string;
 }
 
 /** Context provided to an application JWT verification function. */
@@ -117,8 +123,12 @@ export interface OAuthConfig {
    * query parameter with the value 'query', otherwise uses query parameters.
    */
   tokenTransport?: 'auto' | 'cookie' | 'query';
-  /** Cookie configuration used for setting access and refresh token cookies after OAuth completion. */
+  /** Default cookie configuration used for setting access and refresh token cookies after OAuth completion. */
   cookieConfig?: CookieConfig;
+  /** Cookie configuration used for setting the access token cookie after OAuth completion. */
+  accessTokenCookieConfig?: NamedCookieConfig;
+  /** Cookie configuration used for setting the refresh token cookie after OAuth completion. */
+  refreshTokenCookieConfig?: NamedCookieConfig;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own after OAuth completion. */
   jwtTransform?: JwtTransform;
   /** Log message output interface. */
@@ -137,8 +147,12 @@ export interface JwtOptions {
   browserLogin?: boolean;
   /** OAuth configuration used when redirecting to the OAuth login URL. */
   oauthConfig?: OAuthConfig;
-  /** Cookie configuration used for setting access token cookie after refresh. Uses OAuth cookie configuration by default. */
+  /** Default cookie configuration used for setting access and refresh token cookies after refresh. Uses OAuth cookie configuration by default. */
   cookieConfig?: CookieConfig;
+  /** Cookie configuration used for setting the access token cookie after OAuth completion. */
+  accessTokenCookieConfig?: NamedCookieConfig;
+  /** Cookie configuration used for setting the refresh token cookie after OAuth completion. */
+  refreshTokenCookieConfig?: NamedCookieConfig;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own. Uses OAuth JWT transform by default. */
   jwtTransform?: JwtTransform;
   /** JWT verification function for application-issued tokens. */
@@ -154,7 +168,16 @@ export interface RefreshJwtResult {
 }
 
 /** @ignore */
-const defaultCookieConfig: CookieConfig = {
+const defaultAccessTokenCookieConfig: NamedCookieConfig & { name: string } = {
+  name: 'access_token',
+  disabled: false,
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production'
+};
+
+/** @ignore */
+const defaultRefreshTokenCookieConfig: NamedCookieConfig & { name: string } = {
+  name: 'refresh_token',
   disabled: false,
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production'
@@ -220,11 +243,23 @@ export class ExpressJwtFusionAuth {
   public jwt(options: JwtOptions): express.RequestHandler {
     const effectiveOptions = { ...defaultJwtOptions, ...options };
     /* istanbul ignore next */
-    const { disabled: cookiesDisabled, ...cookieOptions } = {
-      ...defaultCookieConfig,
+    const accessTokenCookieConfig = {
+      ...defaultAccessTokenCookieConfig,
       ...options.oauthConfig?.cookieConfig,
-      ...options.cookieConfig
+      ...options.oauthConfig?.accessTokenCookieConfig,
+      ...options.cookieConfig,
+      ...options.accessTokenCookieConfig
     };
+    /* istanbul ignore next */
+    const refreshTokenCookieConfig = {
+      ...defaultRefreshTokenCookieConfig,
+      ...options.oauthConfig?.cookieConfig,
+      ...options.oauthConfig?.refreshTokenCookieConfig,
+      ...options.cookieConfig,
+      ...options.refreshTokenCookieConfig
+    };
+    const { name: accessTokenCookieName, disabled: accessTokenCookieDisabled } = accessTokenCookieConfig;
+    const { name: refreshTokenCookieName, disabled: refreshTokenCookieDisabled } = refreshTokenCookieConfig;
     return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       const { logger = getDefaultLogger() } = options;
 
@@ -238,9 +273,9 @@ export class ExpressJwtFusionAuth {
           token = credentials;
           tokenSource = 'Authorization header Bearer token';
         }
-      } else if (!cookiesDisabled && cookies.access_token) {
-        token = cookies.access_token;
-        tokenSource = 'access_token cookie';
+      } else if (!accessTokenCookieDisabled && cookies[accessTokenCookieName]) {
+        token = cookies[accessTokenCookieName];
+        tokenSource = `${accessTokenCookieName} cookie`;
       }
       if (token) {
         try {
@@ -259,17 +294,24 @@ export class ExpressJwtFusionAuth {
                 payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
               }
             } catch (err) {
-              if (err instanceof jose.errors.JWTExpired && !cookiesDisabled && cookies.refresh_token) {
+              // refresh expired JWT automatically if both token cookies are enabled and provided
+              if (
+                err instanceof jose.errors.JWTExpired &&
+                !accessTokenCookieDisabled &&
+                !refreshTokenCookieDisabled &&
+                cookies[accessTokenCookieName] &&
+                cookies[refreshTokenCookieName]
+              ) {
                 let refresh;
                 try {
-                  refresh = await this.postRefresh(logger, cookies.refresh_token, token);
+                  refresh = await this.postRefresh(logger, cookies[refreshTokenCookieName], token);
                 } catch {
                   // rethrow original error if refresh fails
                   throw err;
                 }
 
                 token = refresh.token;
-                tokenSource = 'refresh_token cookie';
+                tokenSource = `${refreshTokenCookieName} cookie`;
                 payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
 
                 /* istanbul ignore next */
@@ -285,9 +327,9 @@ export class ExpressJwtFusionAuth {
                   ));
                 }
 
-                res.cookie('access_token', token, cookieOptions);
+                res.cookie(accessTokenCookieName, token, accessTokenCookieConfig);
                 // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
-                res.cookie('refresh_token', refresh.refreshToken, cookieOptions);
+                res.cookie(refreshTokenCookieName, refresh.refreshToken, refreshTokenCookieConfig);
               } else {
                 throw err;
               }
@@ -303,7 +345,11 @@ export class ExpressJwtFusionAuth {
           logger.error(`Error fetching keys to verify JWT: ${asError(err).message}`);
         }
       } else {
-        logger.debug('No JWT provided in Authorization header or access_token cookie');
+        let message = 'No JWT provided in Authorization header';
+        if (!accessTokenCookieDisabled) {
+          message += ` or ${accessTokenCookieName} cookie`;
+        }
+        logger.debug(message);
       }
       if (effectiveOptions.required || !!token) {
         if (
@@ -348,14 +394,15 @@ export class ExpressJwtFusionAuth {
     oldToken?: string,
     context?: JwtTransformContext
   ): Promise<RefreshJwtResult> {
-    const logger = context?.options?.logger ?? getDefaultLogger();
+    const options = context?.options;
+    const logger = options?.logger ?? getDefaultLogger();
     const refresh = await this.postRefresh(logger, refreshToken, oldToken);
     let token = refresh.token;
     let payload = this.decodeTrustedJwt(token);
 
-    if (context?.options) {
+    if (options) {
       /* istanbul ignore next */
-      const jwtTransform = context.options.jwtTransform || context.options.oauthConfig?.jwtTransform;
+      const jwtTransform = options.jwtTransform || options.oauthConfig?.jwtTransform;
       /* istanbul ignore else */
       if (jwtTransform) {
         ({ token, payload } = await jwtTransform({ token, payload }, context));
@@ -415,7 +462,20 @@ export class ExpressJwtFusionAuth {
    * @param {OAuthConfig} config the OAuth 2.0 configuration settings
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
-    const { disabled: cookiesDisabled, ...cookieOptions } = { ...defaultCookieConfig, ...config.cookieConfig };
+    /* istanbul ignore next */
+    const accessTokenCookieConfig = {
+      ...defaultAccessTokenCookieConfig,
+      ...config.cookieConfig,
+      ...config.accessTokenCookieConfig
+    };
+    /* istanbul ignore next */
+    const refreshTokenCookieConfig = {
+      ...defaultRefreshTokenCookieConfig,
+      ...config.cookieConfig,
+      ...config.refreshTokenCookieConfig
+    };
+    const { name: accessTokenCookieName, disabled: accessTokenCookieDisabled } = accessTokenCookieConfig;
+    const { name: refreshTokenCookieName, disabled: refreshTokenCookieDisabled } = refreshTokenCookieConfig;
     return async (req: express.Request, res: express.Response): Promise<void> => {
       const { logger = getDefaultLogger() } = config;
 
@@ -434,7 +494,9 @@ export class ExpressJwtFusionAuth {
         return;
       }
 
-      let { tokenTransport = 'auto' } = config;
+      const { tokenTransport = 'auto' } = config;
+      let accessTokenTransport = tokenTransport;
+      let refreshTokenTransport = tokenTransport;
       let stateParams: URLSearchParams | undefined;
       let baseState: string | undefined;
       let paramsChanged = false;
@@ -448,19 +510,25 @@ export class ExpressJwtFusionAuth {
         stateParams = new URLSearchParams(paramsStart >= 0 ? state.substring(paramsStart + 1) : undefined);
         baseState = paramsStart >= 0 ? state.substring(0, paramsStart) : state;
 
-        const tokenParam = stateParams.get('token_transport');
+        const tokenParamName = 'token_transport';
+        const tokenParam = stateParams.get(tokenParamName);
         if (tokenParam) {
-          stateParams.delete('token_transport');
+          stateParams.delete(tokenParamName);
           paramsChanged = true;
         }
 
         if (tokenTransport === 'auto') {
-          if (cookiesDisabled || tokenParam === 'query') {
-            tokenTransport = 'query';
+          if (accessTokenCookieDisabled || tokenParam === 'query') {
+            accessTokenTransport = 'query';
           } else {
-            tokenTransport = 'cookie';
+            accessTokenTransport = 'cookie';
           }
-        } else if (cookiesDisabled && tokenTransport === 'cookie') {
+          if (refreshTokenCookieDisabled || tokenParam === 'query') {
+            refreshTokenTransport = 'query';
+          } else {
+            refreshTokenTransport = 'cookie';
+          }
+        } else if (tokenTransport === 'cookie' && accessTokenCookieDisabled && refreshTokenCookieDisabled) {
           this.oauthError(res, 'invalid_request', 'Cannot specify redirect state with cookies disabled');
           return;
         }
@@ -500,20 +568,25 @@ export class ExpressJwtFusionAuth {
 
         let jwtVia;
         if (stateParams && typeof state === 'string') {
-          switch (tokenTransport) {
+          switch (accessTokenTransport) {
             case 'cookie':
-              res.cookie('access_token', data.access_token, cookieOptions);
-              if (data.refresh_token) {
-                res.cookie('refresh_token', data.refresh_token, cookieOptions);
-              }
+              res.cookie(accessTokenCookieName, data.access_token, accessTokenCookieConfig);
               break;
             case 'query':
-              stateParams.set('access_token', data.access_token);
-              if (data.refresh_token) {
-                stateParams.set('refresh_token', data.refresh_token);
-              }
+              stateParams.set(accessTokenCookieName, data.access_token);
               paramsChanged = true;
               break;
+          }
+          if (data.refresh_token) {
+            switch (refreshTokenTransport) {
+              case 'cookie':
+                res.cookie(refreshTokenCookieName, data.refresh_token, refreshTokenCookieConfig);
+                break;
+              case 'query':
+                stateParams.set(refreshTokenCookieName, data.refresh_token);
+                paramsChanged = true;
+                break;
+            }
           }
           if (paramsChanged) {
             state = stateParams.entries().next().done ? baseState! : `${baseState}?${stateParams}`;

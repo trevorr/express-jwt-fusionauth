@@ -8,6 +8,8 @@ import { isOAuthErrorResponse } from '../src';
 
 const {
   APP_COOKIE_DOMAIN,
+  APP_ACCESS_TOKEN_COOKIE = 'the_access_token',
+  APP_REFRESH_TOKEN_COOKIE = 'the_refresh_token',
   APP_JWT_ISSUER,
   APP_URL,
   FUSIONAUTH_ADMIN_EMAIL,
@@ -20,9 +22,9 @@ const {
 const api = axios.create({ baseURL: APP_URL });
 
 let code: string | null;
-let access_token: string;
-let app_access_token: string;
-let refresh_token: string;
+let accessToken: string;
+let appAccessToken: string;
+let refreshToken: string;
 
 interface AuthorizeOptions {
   scope?: string;
@@ -117,6 +119,17 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
+  it('authenticated endpoint without JWT (no cookies)', async function () {
+    try {
+      await api.get('/authed-no-cookies');
+    } catch (err) {
+      assert(axios.isAxiosError(err) && err.response);
+      expect(err.response.status).to.equal(401);
+      return;
+    }
+    fail('rejection expected');
+  });
+
   it('authenticated endpoint with invalid JWT (non-browser)', async function () {
     try {
       await api.get('/authed', {
@@ -203,7 +216,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.token_type).to.equal('Bearer');
     expect(res.data.access_token).to.be.a('string');
     expect(res.data.expires_in).to.be.a('number');
-    access_token = res.data.access_token;
+    accessToken = res.data.access_token;
   });
 
   it('oauth completion fails with invalid state', async function () {
@@ -275,7 +288,7 @@ describe('express-jwt-fusionauth', function () {
     });
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
     expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
@@ -295,7 +308,7 @@ describe('express-jwt-fusionauth', function () {
     });
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
     expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
@@ -316,7 +329,9 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(Object.keys(cookies)).to.have.length(0);
-    expect(res.headers.location).to.match(/\/my-redirect\?access_token=[\w.-]+/);
+    const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
   });
 
   it('oauth completion redirects to state with additional query parameters', async function () {
@@ -334,7 +349,9 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(Object.keys(cookies)).to.have.length(0);
-    expect(res.headers.location).to.match(/\/my-redirect\?q=x&access_token=[\w.-]+/);
+    const match = /\/my-redirect\?q=x&([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
   });
 
   it('oauth completion redirects to state with query parameters using token_transport override', async function () {
@@ -352,7 +369,29 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(Object.keys(cookies)).to.have.length(0);
-    expect(res.headers.location).to.match(/\/my-redirect\?access_token=[\w.-]+/);
+    const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+  });
+
+  it('oauth completion redirects to state with query parameters if cookies are disabled', async function () {
+    const code = await getAuthorizationCode();
+    const res = await api.get('/oauth-no-cookies', {
+      params: {
+        code,
+        state: '/my-redirect'
+      },
+      maxRedirects: 0,
+      validateStatus(status) {
+        return status < 400;
+      }
+    });
+    expect(res.status).to.equal(302);
+    const cookies = getCookies(res);
+    expect(Object.keys(cookies)).to.have.length(0);
+    const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
   });
 
   it('oauth completion returns refresh token', async function () {
@@ -368,10 +407,10 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.access_token).to.be.a('string');
     expect(res.data.refresh_token).to.be.a('string');
     expect(res.data.expires_in).to.be.a('number');
-    refresh_token = res.data.refresh_token;
+    refreshToken = res.data.refresh_token;
   });
 
-  it('oauth completion redirects to state with cookies and refresh token', async function () {
+  it('oauth completion with refresh token redirects to state with cookies', async function () {
     const code = await getAuthorizationCode({ scope: 'offline_access' });
     const res = await api.get('/oauth', {
       params: {
@@ -385,14 +424,14 @@ describe('express-jwt-fusionauth', function () {
     });
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
-    expect(cookies.refresh_token).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
     expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
     expect(res.headers.location).to.equal('/my-redirect');
   });
 
-  it('oauth completion redirects to state with query parameters and refresh token', async function () {
+  it('oauth completion with refresh token redirects to state with query parameters', async function () {
     const code = await getAuthorizationCode({ scope: 'offline_access' });
     const res = await api.get('/oauth-query', {
       params: {
@@ -407,7 +446,31 @@ describe('express-jwt-fusionauth', function () {
     expect(res.status).to.equal(302);
     const cookies = getCookies(res);
     expect(Object.keys(cookies)).to.have.length(0);
-    expect(res.headers.location).to.match(/\/my-redirect\?access_token=[\w.-]+&refresh_token=[\w.-]+/);
+    const match = /\/my-redirect\?([^=]+)=[\w.-]+&([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[2]).to.equal(APP_REFRESH_TOKEN_COOKIE);
+  });
+
+  it('oauth completion redirects to state with access token query parameter and refresh token cookie', async function () {
+    const code = await getAuthorizationCode({ scope: 'offline_access' });
+    const res = await api.get('/oauth-no-access-token-cookie', {
+      params: {
+        code,
+        state: '/my-redirect'
+      },
+      maxRedirects: 0,
+      validateStatus(status) {
+        return status < 400;
+      }
+    });
+    expect(res.status).to.equal(302);
+    const cookies = getCookies(res);
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.undefined;
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
+    const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location);
+    expect(match).to.not.be.null;
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
   });
 
   it('oauth completion supports application JWT', async function () {
@@ -424,13 +487,13 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.expires_in).to.be.a('number');
     const jwt = jose.UnsecuredJWT.decode(res.data.access_token);
     expect(jwt.payload.iss).to.equal(APP_JWT_ISSUER);
-    app_access_token = res.data.access_token;
+    appAccessToken = res.data.access_token;
   });
 
   it('authenticated endpoint with Authorization Header Bearer token', async function () {
     const res = await api.get('/authed', {
       headers: {
-        Authorization: `Bearer ${access_token}`
+        Authorization: `Bearer ${accessToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -446,10 +509,10 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.roles).to.eql(['admin']);
   });
 
-  it('authenticated endpoint with access_token cookie', async function () {
+  it('authenticated endpoint with access token cookie', async function () {
     const res = await api.get('/authed', {
       headers: {
-        Cookie: `access_token=${access_token}`
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -468,7 +531,7 @@ describe('express-jwt-fusionauth', function () {
   it('authenticated endpoint with application JWT', async function () {
     const res = await api.get('/authed-app-jwt', {
       headers: {
-        Cookie: `access_token=${app_access_token}`
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${appAccessToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -488,7 +551,7 @@ describe('express-jwt-fusionauth', function () {
     try {
       await api.get('/super', {
         headers: {
-          Authorization: `Bearer ${access_token}`
+          Authorization: `Bearer ${accessToken}`
         }
       });
     } catch (err) {
@@ -508,7 +571,7 @@ describe('express-jwt-fusionauth', function () {
   it('optionally authenticated endpoint with valid JWT', async function () {
     const res = await api.get('/opt-authed', {
       headers: {
-        Authorization: `Bearer ${access_token}`
+        Authorization: `Bearer ${accessToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -540,12 +603,12 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data).to.equal('nobody');
   });
 
-  it('authenticated endpoint with refresh_token cookie', async function () {
+  it('authenticated endpoint with refresh token cookie', async function () {
     this.timeout(10000);
     await sleep(6000); // JWT timeToLiveInSeconds = 5
     const res = await api.get('/authed', {
       headers: {
-        Cookie: `access_token=${access_token}; refresh_token=${refresh_token}`
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -560,18 +623,18 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
     const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
-    expect(cookies.access_token).to.not.equal(access_token);
-    expect(cookies.refresh_token).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.not.equal(accessToken);
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
     expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
-    refresh_token = cookies.refresh_token;
+    refreshToken = cookies[APP_REFRESH_TOKEN_COOKIE];
   });
 
-  it('authenticated endpoint with refresh_token cookie and application JWT', async function () {
+  it('authenticated endpoint with refresh token cookie and application JWT', async function () {
     const res = await api.get('/authed-app-jwt', {
       headers: {
-        Cookie: `access_token=${app_access_token}; refresh_token=${refresh_token}`
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${appAccessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
       }
     });
     expect(res.status).to.equal(200);
@@ -586,20 +649,20 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.jwt.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.jwt.roles).to.eql(['admin']);
     const cookies = getCookies(res);
-    expect(cookies.access_token).to.be.a('string');
-    expect(cookies.access_token).to.not.equal(access_token);
-    expect(cookies.refresh_token).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.be.a('string');
+    expect(cookies[APP_ACCESS_TOKEN_COOKIE]).to.not.equal(accessToken);
+    expect(cookies[APP_REFRESH_TOKEN_COOKIE]).to.be.a('string');
     expect(cookies.Domain).to.equal(APP_COOKIE_DOMAIN);
     expect(hasHttpOnlyCookies(res)).to.be.true;
-    refresh_token = cookies.refresh_token;
+    refreshToken = cookies[APP_REFRESH_TOKEN_COOKIE];
   });
 
   it('authenticated endpoint with expired JWT and cookies disabled', async function () {
     try {
       await api.get('/authed-no-cookies', {
         headers: {
-          Authorization: `Bearer ${access_token}`,
-          Cookie: `refresh_token=${refresh_token}`
+          Authorization: `Bearer ${accessToken}`,
+          Cookie: `${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
         }
       });
     } catch (err) {
@@ -610,11 +673,11 @@ describe('express-jwt-fusionauth', function () {
     fail('rejection expected');
   });
 
-  it('authenticated endpoint with invalid refresh_token cookie', async function () {
+  it('authenticated endpoint with invalid refresh token cookie', async function () {
     try {
       await api.get('/authed', {
         headers: {
-          Cookie: `access_token=${access_token}; refresh_token=junk`
+          Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=junk`
         }
       });
     } catch (err) {
@@ -630,12 +693,12 @@ describe('express-jwt-fusionauth', function () {
     await sleep(6000); // JWT timeToLiveInSeconds = 5
     const res = await api.get('/refresh', {
       headers: {
-        Cookie: `access_token=${access_token}; refresh_token=${refresh_token}`
+        Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
       }
     });
     expect(res.status).to.equal(200);
     expect(res.data.token).to.be.a('string');
-    expect(res.data.token).to.not.equal(access_token);
+    expect(res.data.token).to.not.equal(accessToken);
     expect(res.data.refreshToken).to.be.a('string');
     expect(res.data.payload.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.exp).to.be.a('number');
@@ -647,22 +710,22 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.payload.email_verified).to.be.true;
     expect(res.data.payload.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.roles).to.eql(['admin']);
-    refresh_token = res.data.refreshToken;
+    refreshToken = res.data.refreshToken;
   });
 
   it('explicit refresh supports application JWT', async function () {
     const res = await api.post(
       '/refresh-app-jwt',
-      { refreshToken: refresh_token },
+      { refreshToken: refreshToken },
       {
         headers: {
-          Authorization: `Bearer ${access_token}`
+          Authorization: `Bearer ${accessToken}`
         }
       }
     );
     expect(res.status).to.equal(200);
     expect(res.data.token).to.be.a('string');
-    expect(res.data.token).to.not.equal(access_token);
+    expect(res.data.token).to.not.equal(accessToken);
     expect(res.data.refreshToken).to.be.a('string');
     expect(res.data.payload.aud).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.exp).to.be.a('number');
@@ -674,7 +737,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.payload.email_verified).to.be.true;
     expect(res.data.payload.applicationId).to.equal(FUSIONAUTH_APPLICATION_ID);
     expect(res.data.payload.roles).to.eql(['admin']);
-    refresh_token = res.data.refreshToken;
+    refreshToken = res.data.refreshToken;
   });
 
   it('handles invalid OAuthError responses', function () {
