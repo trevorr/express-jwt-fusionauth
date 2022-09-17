@@ -2,7 +2,7 @@ import assert, { fail } from 'assert';
 import axios, { AxiosResponse } from 'axios';
 import { expect } from 'chai';
 import cookie from 'cookie';
-import UnsecuredJWT from 'jose/jwt/unsecured';
+import * as jose from 'jose';
 import qs from 'qs';
 import { isOAuthErrorResponse } from '../src';
 
@@ -422,7 +422,7 @@ describe('express-jwt-fusionauth', function () {
     expect(res.data.token_type).to.equal('Bearer');
     expect(res.data.access_token).to.be.a('string');
     expect(res.data.expires_in).to.be.a('number');
-    const jwt = UnsecuredJWT.decode(res.data.access_token);
+    const jwt = jose.UnsecuredJWT.decode(res.data.access_token);
     expect(jwt.payload.iss).to.equal(APP_JWT_ISSUER);
     app_access_token = res.data.access_token;
   });

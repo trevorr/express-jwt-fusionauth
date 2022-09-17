@@ -1,7 +1,7 @@
 import bodyParser from 'body-parser';
 import cookieParser from 'cookie-parser';
 import express from 'express';
-import UnsecuredJWT from 'jose/jwt/unsecured';
+import * as jose from 'jose';
 import { ExpressJwtFusionAuth, JwtClaims, JwtOptions, JwtTransform, JwtVerifier, OAuthConfig } from '../src';
 import { getDefaultLogger } from '../src/logger';
 
@@ -38,7 +38,7 @@ const jwtOptions: JwtOptions = {
 
 const jwtTransform: JwtTransform = async ({ token, payload }) => {
   payload = { ...payload, iss: APP_JWT_ISSUER! };
-  token = new UnsecuredJWT(payload).encode();
+  token = new jose.UnsecuredJWT(payload).encode();
   return { token, payload };
 };
 
@@ -47,7 +47,7 @@ const jwtVerifier: JwtVerifier = async token => {
     return false;
   }
   // Don't do this in real apps! Use jwtVerify!
-  const jwt = UnsecuredJWT.decode(token);
+  const jwt = jose.UnsecuredJWT.decode(token);
   if (jwt.payload.iss !== APP_JWT_ISSUER) {
     return false;
   }

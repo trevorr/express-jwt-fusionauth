@@ -1,10 +1,7 @@
 import axios, { AxiosInstance } from 'axios';
 import { asError } from 'catch-unknown';
 import express, { CookieOptions } from 'express';
-import createRemoteJWKSet from 'jose/jwks/remote';
-import jwtVerify, { JWTPayload, JWTVerifyOptions } from 'jose/jwt/verify';
-import { decode as base64Decode } from 'jose/util/base64url';
-import { JWTExpired } from 'jose/util/errors';
+import * as jose from 'jose';
 import qs from 'qs';
 import { getDefaultLogger, Logger } from './logger';
 
@@ -14,7 +11,7 @@ import { getDefaultLogger, Logger } from './logger';
  * https://tools.ietf.org/html/rfc7519
  * https://fusionauth.io/docs/v1/tech/oauth/tokens/#access-token-claims
  */
-export interface JwtClaims extends JWTPayload {
+export interface JwtClaims extends jose.JWTPayload {
   /** Intended audience of the JWT, which for FusionAuth is the application/client ID. */
   aud: string;
   /** JWT expiration instant in seconds since Unix epoch. */
@@ -131,7 +128,7 @@ export interface OAuthConfig {
 /** Options controlling how to obtain and verify a JWT. */
 export interface JwtOptions {
   /** JWT verification options passed to `jose` `jwtVerify`. */
-  verifyOptions?: JWTVerifyOptions;
+  verifyOptions?: jose.JWTVerifyOptions;
   /** Indicates whether a JWT is required or the route is optionally authenticated. */
   required?: boolean;
   /** Whether to always redirect to the OAuth login URL if a JWT is required but not present or valid. */
@@ -188,7 +185,7 @@ interface RefreshResponse {
   refreshToken: string;
 }
 
-type JWKS = ReturnType<typeof createRemoteJWKSet>;
+type JWKS = ReturnType<typeof jose.createRemoteJWKSet>;
 
 /** Provides factory methods for Express middleware/handlers used to obtain and validate JSON Web Tokens (JWTs). */
 export class ExpressJwtFusionAuth {
@@ -207,7 +204,7 @@ export class ExpressJwtFusionAuth {
 
   private getJWKS(): JWKS {
     if (!this.jwks) {
-      this.jwks = createRemoteJWKSet(new URL(`${this.fusionAuthUrl}/.well-known/jwks.json`));
+      this.jwks = jose.createRemoteJWKSet(new URL(`${this.fusionAuthUrl}/.well-known/jwks.json`));
     }
     return this.jwks;
   }
@@ -259,10 +256,10 @@ export class ExpressJwtFusionAuth {
                 });
               }
               if (!payload) {
-                payload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
+                payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
               }
             } catch (err) {
-              if (err instanceof JWTExpired && !cookiesDisabled && cookies.refresh_token) {
+              if (err instanceof jose.errors.JWTExpired && !cookiesDisabled && cookies.refresh_token) {
                 let refresh;
                 try {
                   refresh = await this.postRefresh(logger, cookies.refresh_token, token);
@@ -273,7 +270,7 @@ export class ExpressJwtFusionAuth {
 
                 token = refresh.token;
                 tokenSource = 'refresh_token cookie';
-                payload = (await jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
+                payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
 
                 /* istanbul ignore next */
                 const jwtTransform = effectiveOptions.jwtTransform || effectiveOptions.oauthConfig?.jwtTransform;
@@ -549,7 +546,7 @@ export class ExpressJwtFusionAuth {
   private decodeTrustedJwt(token: string): JwtClaims {
     // https://github.com/panva/jose/discussions/106#discussioncomment-210262
     const utf8Decoder = new TextDecoder();
-    return JSON.parse(utf8Decoder.decode(base64Decode(token.split('.')[1])));
+    return JSON.parse(utf8Decoder.decode(jose.base64url.decode(token.split('.')[1])));
   }
 
   private oauthError(res: express.Response, code: string, description?: string, statusCode = 400): void {
