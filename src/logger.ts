@@ -16,7 +16,10 @@ export interface Logger {
 const namespace = 'express-jwt-fusionauth';
 
 /** @ignore */
-const getConsoleLogger = (level: string) => (message: string) => console.log(level, namespace, message);
+const getConsoleLogger = (level: string) => (message: string) => {
+  // eslint-disable-next-line no-console
+  console.log(level, namespace, message);
+};
 
 /** @ignore */
 const consoleLogger: Logger = {

@@ -1,5 +1,6 @@
 import cookieParser from 'cookie-parser';
 import express from 'express';
+import got from 'got';
 import * as jose from 'jose';
 import { ExpressJwtFusionAuth, JwtClaims, JwtOptions, JwtTransform, JwtVerifier, OAuthConfig } from '../src';
 import { getDefaultLogger } from '../src/logger';
@@ -30,7 +31,8 @@ const oauthConfig: OAuthConfig = {
     name: APP_ACCESS_TOKEN_COOKIE
   },
   refreshTokenCookieConfig: {
-    name: APP_REFRESH_TOKEN_COOKIE
+    name: APP_REFRESH_TOKEN_COOKIE,
+    maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
   }
 };
 
@@ -39,6 +41,9 @@ const jwtOptions: JwtOptions = {
   required: true,
   alwaysLogin: false,
   browserLogin: true,
+  refreshTokenCookieConfig: {
+    maxAge: undefined // use cookie expiration from refresh endpoint
+  },
   verifyOptions: {
     issuer: FUSIONAUTH_TENANT_ISSUER,
     audience: oauthConfig.clientId
@@ -114,7 +119,10 @@ app.get(
   auth.oauthCompletion({ ...oauthConfig, tokenTransport: 'cookie', cookieConfig: { disabled: true } })
 );
 app.post('/oauth', express.urlencoded({ extended: true }), auth.oauthCompletion(oauthConfig));
-app.get('/oauth-bad-config', new ExpressJwtFusionAuth('http://localhost:99999').oauthCompletion(oauthConfig));
+app.get(
+  '/oauth-bad-config',
+  new ExpressJwtFusionAuth('http://0.0.0.0', got.extend({ retry: 0 })).oauthCompletion(oauthConfig)
+);
 app.get('/authed', auth.jwt(jwtOptions), auth.jwtRole(['root', 'admin']), (req: express.Request, res) => {
   const { jwt } = req;
   res.json({ jwt });
@@ -190,6 +198,7 @@ app.get('/opt-authed', auth.jwt({ ...jwtOptions, required: false }), (req: expre
 
 const port = parseInt(PORT);
 app.listen(port);
+// eslint-disable-next-line no-console
 console.log(`Listening on port ${port}`);
 
 process.on('SIGINT', () => process.exit());

@@ -1,8 +1,9 @@
-import axios, { AxiosInstance } from 'axios';
 import { asError } from 'catch-unknown';
 import express, { CookieOptions } from 'express';
+import got, { ExtendOptions, Got, HTTPError } from 'got';
 import * as jose from 'jose';
 import qs from 'qs';
+import { parse as parseCookies } from 'set-cookie-parser';
 import { getDefaultLogger, Logger } from './logger';
 
 /**
@@ -159,9 +160,9 @@ export interface JwtOptions {
   oauthConfig?: OAuthConfig;
   /** Default cookie configuration used for setting access and refresh token cookies after refresh. Uses OAuth cookie configuration by default. */
   cookieConfig?: CookieConfig;
-  /** Cookie configuration used for setting the access token cookie after OAuth completion. */
+  /** Cookie configuration used for setting the access token cookie after refresh. */
   accessTokenCookieConfig?: NamedCookieConfig;
-  /** Cookie configuration used for setting the refresh token cookie after OAuth completion. */
+  /** Cookie configuration used for setting the refresh token cookie after refresh. */
   refreshTokenCookieConfig?: NamedCookieConfig;
   /** Request/response header configuration. */
   headerConfig?: TokenHeaderConfig;
@@ -171,12 +172,6 @@ export interface JwtOptions {
   jwtVerifier?: JwtVerifier;
   /** Log message output interface. */
   logger?: Logger;
-}
-
-export interface RefreshJwtResult {
-  token: string;
-  refreshToken: string;
-  payload: JwtClaims;
 }
 
 /** @ignore */
@@ -220,21 +215,35 @@ interface RefreshResponse {
   refreshToken: string;
 }
 
+interface RefreshResponseWithExpiration extends RefreshResponse {
+  token: string;
+  refreshToken: string;
+  refreshTokenExpires?: Date;
+}
+
+export interface RefreshJwtResult extends RefreshResponseWithExpiration {
+  payload: JwtClaims;
+}
+
 type JWKS = ReturnType<typeof jose.createRemoteJWKSet>;
 
 /** Provides factory methods for Express middleware/handlers used to obtain and validate JSON Web Tokens (JWTs). */
 export class ExpressJwtFusionAuth {
-  private readonly fusionAuth: AxiosInstance;
+  private readonly fusionAuth: Got;
   private jwks: JWKS | undefined;
 
   /**
    * Creates a middleware factory that communicates with FusionAuth at the given URL.
    * @param {string} fusionAuthUrl the base URL of the FusionAuth application (e.g. `http://fusionauth:9011`)
    */
-  public constructor(private readonly fusionAuthUrl: string) {
-    this.fusionAuth = axios.create({
-      baseURL: fusionAuthUrl
-    });
+  public constructor(private readonly fusionAuthUrl: string, instanceOrOptions?: Got | ExtendOptions) {
+    this.fusionAuth =
+      typeof instanceOrOptions === 'function'
+        ? instanceOrOptions
+        : got.extend({
+            prefixUrl: fusionAuthUrl,
+            ...instanceOrOptions
+          });
   }
 
   private getJWKS(): JWKS {
@@ -389,7 +398,10 @@ export class ExpressJwtFusionAuth {
                 } else {
                   /* istanbul ignore else */
                   if (!refreshTokenCookieDisabled) {
-                    res.cookie(refreshTokenCookieName, refreshResponse.refreshToken, refreshTokenCookieConfig);
+                    res.cookie(refreshTokenCookieName, refreshResponse.refreshToken, {
+                      expires: refreshResponse.refreshTokenExpires,
+                      ...refreshTokenCookieConfig
+                    });
                   }
                 }
               }
@@ -457,31 +469,49 @@ export class ExpressJwtFusionAuth {
     const options = context?.options;
     const logger = options?.logger ?? getDefaultLogger();
     const refresh = await this.postRefresh(logger, refreshToken, oldToken);
-    let token = refresh.token;
-    let payload = this.decodeTrustedJwt(token);
+    const { token } = refresh;
+    const payload = this.decodeTrustedJwt(token);
+    const result = { ...refresh, payload };
 
     if (options) {
       /* istanbul ignore next */
       const jwtTransform = options.jwtTransform || options.oauthConfig?.jwtTransform;
       /* istanbul ignore else */
       if (jwtTransform) {
-        ({ token, payload } = await jwtTransform({ token, payload }, context));
+        Object.assign(result, await jwtTransform({ token, payload }, context));
       }
     }
 
-    return { token, refreshToken: refresh.refreshToken, payload };
+    return result;
   }
 
-  private async postRefresh(logger: Logger, refreshToken: string, token?: string): Promise<RefreshResponse> {
+  private async postRefresh(
+    logger: Logger,
+    refreshToken: string,
+    token?: string
+  ): Promise<RefreshResponseWithExpiration> {
     try {
-      const res = await this.fusionAuth.post<RefreshResponse>('/api/jwt/refresh', { refreshToken, token });
-      return res.data;
+      const res = await this.fusionAuth.post<RefreshResponse>('api/jwt/refresh', {
+        json: { refreshToken, token },
+        responseType: 'json'
+      });
+
+      const body: RefreshResponseWithExpiration = res.body;
+
+      const cookieMap = parseCookies(res, { map: true });
+      const refreshTokenCookie = cookieMap.refresh_token;
+      /* istanbul ignore next */
+      if (refreshTokenCookie?.expires) {
+        body.refreshTokenExpires = refreshTokenCookie.expires;
+      }
+
+      return body;
     } catch (err) {
       let message;
       /* istanbul ignore else */
-      if (axios.isAxiosError(err) && err.response) {
+      if (err instanceof HTTPError && err.response) {
         const { response } = err;
-        message = `HTTP ${response.status}: ${JSON.stringify(response.data)}`;
+        message = `HTTP ${response.statusCode}: ${JSON.stringify(response.body)}`;
       } else {
         ({ message } = asError(err));
       }
@@ -597,16 +627,17 @@ export class ExpressJwtFusionAuth {
       logger.verbose(`Exchanging OAuth code "${code}" for token`);
 
       try {
-        const tokenRes = await this.fusionAuth.post('/oauth2/token', null, {
-          params: {
+        const tokenRes = await this.fusionAuth.post<OAuthTokenResponse>('oauth2/token', {
+          searchParams: {
             client_id: config.clientId,
             client_secret: config.clientSecret,
             code,
             grant_type: 'authorization_code',
             redirect_uri: config.redirectUri
-          }
+          },
+          responseType: 'json'
         });
-        const data = tokenRes.data as OAuthTokenResponse;
+        const data = tokenRes.body;
 
         let jwtSource;
         if (config.jwtTransform) {
@@ -662,12 +693,12 @@ export class ExpressJwtFusionAuth {
           `Completed OAuth with ${jwtSource} JWT${data.refresh_token ? ' and refresh token' : ''} via ${jwtVia}`
         );
       } catch (err) {
-        if (axios.isAxiosError(err) && err.response && isOAuthErrorResponse(err.response.data)) {
+        if (err instanceof HTTPError && err.response && isOAuthErrorResponse(err.response.body)) {
           /* istanbul ignore next */
-          const { error = 'unknown_error', error_description } = err.response.data;
+          const { error = 'unknown_error', error_description } = err.response.body;
           const message = error_description || /* istanbul ignore next */ error;
           logger.debug(`Failed to exchange authorization code for token: ${message}`);
-          this.oauthError(res, error, error_description, err.response.status);
+          this.oauthError(res, error, error_description, err.response.statusCode);
         } else {
           logger.debug(`Failed to exchange authorization code for token: ${asError(err).message}`);
           this.oauthError(res, 'internal_error', 'Failed to exchange authorization code for token', 500);

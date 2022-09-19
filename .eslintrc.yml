@@ -17,4 +17,5 @@ rules:
     - error
     - ignoreRestSiblings: true
       argsIgnorePattern: "^_"
+  no-console: warn
   quotes: ["error", "single", { "avoidEscape": true }]
