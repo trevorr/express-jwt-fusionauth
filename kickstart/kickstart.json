@@ -5,6 +5,9 @@
     "testApplicationId": "#{ENV.FUSIONAUTH_APPLICATION_ID}",
     "testClientSecret": "#{ENV.FUSIONAUTH_APPLICATION_CLIENT_SECRET}",
     "testRedirectUrl": "#{ENV.FUSIONAUTH_APPLICATION_REDIRECT_URL}",
+    "oneTimeRefreshApplicationId": "#{ENV.ONE_TIME_REFRESH_APPLICATION_ID}",
+    "oneTimeRefreshClientSecret": "#{ENV.ONE_TIME_REFRESH_APPLICATION_CLIENT_SECRET}",
+    "oneTimeRefreshRedirectUrl": "#{ENV.ONE_TIME_REFRESH_APPLICATION_REDIRECT_URL}",
     "adminUserId": "#{ENV.FUSIONAUTH_ADMIN_USER_ID}",
     "adminEmail": "#{ENV.FUSIONAUTH_ADMIN_EMAIL}",
     "adminPassword": "#{ENV.FUSIONAUTH_ADMIN_PASSWORD}"
@@ -20,10 +23,7 @@
       "url": "/api/tenant/#{defaultTenantId}",
       "body": {
         "tenant": {
-          "issuer": "#{defaultTenantIssuer}",
-          "jwtConfiguration": {
-            "refreshTokenUsagePolicy": "OneTimeUse"
-          }
+          "issuer": "#{defaultTenantIssuer}"
         }
       }
     },
@@ -32,11 +32,11 @@
       "url": "/api/application/#{testApplicationId}",
       "body": {
         "application": {
-          "name": "Test Application",
+          "name": "Test Application w/ reusable refresh token",
           "jwtConfiguration": {
             "enabled": true,
             "refreshTokenTimeToLiveInMinutes": 43200,
-            "refreshTokenUsagePolicy": "OneTimeUse",
+            "refreshTokenUsagePolicy": "Reusable",
             "timeToLiveInSeconds": 5
           },
           "loginConfiguration": {
@@ -47,6 +47,41 @@
             "requireClientAuthentication": true,
             "authorizedRedirectURLs": [
               "#{testRedirectUrl}"
+            ],
+            "enabledGrants": [
+              "authorization_code",
+              "refresh_token"
+            ],
+            "generateRefreshTokens": true
+          },
+          "roles": [
+            {
+              "name": "admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/application/#{oneTimeRefreshApplicationId}",
+      "body": {
+        "application": {
+          "name": "Test Application w/ one time use refresh token",
+          "jwtConfiguration": {
+            "enabled": true,
+            "refreshTokenTimeToLiveInMinutes": 43200,
+            "refreshTokenUsagePolicy": "OneTimeUse",
+            "timeToLiveInSeconds": 5
+          },
+          "loginConfiguration": {
+            "allowTokenRefresh": true
+          },
+          "oauthConfiguration": {
+            "clientSecret": "#{oneTimeRefreshClientSecret}",
+            "requireClientAuthentication": true,
+            "authorizedRedirectURLs": [
+              "#{oneTimeRefreshRedirectUrl}"
             ],
             "enabledGrants": [
               "authorization_code",
@@ -83,6 +118,17 @@
       "body": {
         "registration": {
           "applicationId": "#{testApplicationId}",
+          "roles": ["admin"],
+          "username": "test"
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "url": "/api/user/registration/#{adminUserId}",
+      "body": {
+        "registration": {
+          "applicationId": "#{oneTimeRefreshApplicationId}",
           "roles": ["admin"],
           "username": "test"
         }

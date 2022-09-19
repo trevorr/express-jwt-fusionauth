@@ -277,6 +277,7 @@ export class ExpressJwtFusionAuth {
 
       let token: string | undefined;
       let tokenSource: string | undefined;
+      let tokenFromHeader = false;
       /* istanbul ignore next */
       const { headers = {}, cookies = {} } = req;
       if (headers.authorization) {
@@ -284,6 +285,7 @@ export class ExpressJwtFusionAuth {
         if (credentials && /^Bearer$/i.test(scheme)) {
           token = credentials;
           tokenSource = 'Authorization header Bearer token';
+          tokenFromHeader = true;
         }
       } else if (!accessTokenCookieDisabled && cookies[accessTokenCookieName]) {
         token = cookies[accessTokenCookieName];
@@ -292,12 +294,14 @@ export class ExpressJwtFusionAuth {
 
       let refreshToken: string | undefined;
       let refreshTokenSource: string | undefined;
+      let refreshTokenFromHeader = false;
       if (effectiveOptions.headerConfig?.refreshTokenHeader) {
         const headerName = effectiveOptions.headerConfig.refreshTokenHeader;
         const headerValue = headers[headerName];
         if (typeof headerValue === 'string') {
           refreshToken = headerValue;
           refreshTokenSource = `${headerName} header`;
+          refreshTokenFromHeader = true;
         }
       }
       if (!refreshToken && !refreshTokenCookieDisabled && cookies[refreshTokenCookieName]) {
@@ -322,64 +326,72 @@ export class ExpressJwtFusionAuth {
                 payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
               }
             } catch (err) {
-              // refresh expired JWT automatically if we have a way to return the new access token
+              if (!(err instanceof jose.errors.JWTExpired) || !refreshToken) {
+                throw err;
+              }
+
+              // refresh expired JWT automatically if we have a refresh token from a header, or from a cookie
+              // and the HTTP method is safe (to avoid CSRF), and we have a way to return the new tokens
+              if (!refreshTokenFromHeader && !isSafeMethod(req.method)) {
+                logger.debug(`Cannot auto-refresh from cookie with unsafe method ${req.method}`);
+                throw err;
+              }
+
               const refreshedAccessTokenHeader = effectiveOptions.headerConfig?.refreshedAccessTokenHeader;
               const refreshedRefreshTokenHeader = effectiveOptions.headerConfig?.refreshedRefreshTokenHeader;
               if (
-                err instanceof jose.errors.JWTExpired &&
-                refreshToken &&
-                refreshTokenSource &&
-                (refreshedAccessTokenHeader || !accessTokenCookieDisabled) &&
-                (refreshedRefreshTokenHeader || !refreshTokenCookieDisabled)
+                (!refreshedAccessTokenHeader && accessTokenCookieDisabled) ||
+                (!refreshedRefreshTokenHeader && refreshTokenCookieDisabled)
               ) {
-                let refresh;
-                try {
-                  refresh = await this.postRefresh(logger, refreshToken, token);
-                } catch {
-                  // rethrow original error if refresh fails
-                  throw err;
+                logger.debug('Cannot auto-refresh without cookie or header to return new tokens');
+                throw err;
+              }
+
+              let refreshResponse;
+              try {
+                refreshResponse = await this.postRefresh(logger, refreshToken, token);
+              } catch (refreshErr) {
+                logger.debug(`Failed to auto-refresh: ${asError(refreshErr).message}`);
+                // rethrow original error if refresh fails
+                throw err;
+              }
+
+              token = refreshResponse.token;
+              tokenSource = refreshTokenSource;
+              payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
+
+              /* istanbul ignore next */
+              const jwtTransform = effectiveOptions.jwtTransform || effectiveOptions.oauthConfig?.jwtTransform;
+              if (jwtTransform) {
+                ({ token, payload } = await jwtTransform(
+                  { token, payload },
+                  {
+                    options: effectiveOptions,
+                    request: req,
+                    response: res
+                  }
+                ));
+              }
+
+              if (refreshedAccessTokenHeader && tokenFromHeader) {
+                res.setHeader(refreshedAccessTokenHeader, token);
+              } else {
+                /* istanbul ignore else */
+                if (!accessTokenCookieDisabled) {
+                  res.cookie(accessTokenCookieName, token, accessTokenCookieConfig);
                 }
+              }
 
-                token = refresh.token;
-                tokenSource = refreshTokenSource;
-                payload = (await jose.jwtVerify(token, keyStore, effectiveOptions.verifyOptions)).payload as JwtClaims;
-
-                /* istanbul ignore next */
-                const jwtTransform = effectiveOptions.jwtTransform || effectiveOptions.oauthConfig?.jwtTransform;
-                if (jwtTransform) {
-                  ({ token, payload } = await jwtTransform(
-                    { token, payload },
-                    {
-                      options: effectiveOptions,
-                      request: req,
-                      response: res
-                    }
-                  ));
-                }
-
-                if (refreshedAccessTokenHeader && headers.authorization) {
-                  res.setHeader(refreshedAccessTokenHeader, token);
+              // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
+              if (refreshResponse.refreshToken !== refreshToken) {
+                if (refreshedRefreshTokenHeader && refreshTokenFromHeader) {
+                  res.setHeader(refreshedRefreshTokenHeader, refreshResponse.refreshToken);
                 } else {
                   /* istanbul ignore else */
-                  if (!accessTokenCookieDisabled) {
-                    res.cookie(accessTokenCookieName, token, accessTokenCookieConfig);
+                  if (!refreshTokenCookieDisabled) {
+                    res.cookie(refreshTokenCookieName, refreshResponse.refreshToken, refreshTokenCookieConfig);
                   }
                 }
-
-                // refresh token will be updated if refreshTokenUsagePolicy is OneTimeUse
-                /* istanbul ignore else */
-                if (refresh.refreshToken !== refreshToken) {
-                  if (refreshedRefreshTokenHeader && refreshTokenSource.endsWith('header')) {
-                    res.setHeader(refreshedRefreshTokenHeader, refresh.refreshToken);
-                  } else {
-                    /* istanbul ignore else */
-                    if (!refreshTokenCookieDisabled) {
-                      res.cookie(refreshTokenCookieName, refresh.refreshToken, refreshTokenCookieConfig);
-                    }
-                  }
-                }
-              } else {
-                throw err;
               }
             }
             req.jwt = payload;
@@ -688,4 +700,8 @@ export function isOAuthErrorResponse(v: unknown): v is OAuthErrorResponse {
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v != null;
+}
+
+function isSafeMethod(s: string): boolean {
+  return ['GET', 'HEAD', 'OPTIONS'].includes(s);
 }
