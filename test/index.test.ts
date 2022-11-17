@@ -591,8 +591,8 @@ describe('express-jwt-fusionauth', function () {
   });
 
   it('authenticated endpoint with refresh token cookie', async function () {
-    this.timeout(10000);
-    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    this.timeout(15000);
+    await sleep(11000); // JWT timeToLiveInSeconds = 10
     const res = await api.get<{ jwt: Record<string, unknown> }>('authed', {
       headers: {
         Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
@@ -795,8 +795,8 @@ describe('express-jwt-fusionauth', function () {
   });
 
   it('explicit refresh', async function () {
-    this.timeout(10000);
-    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    this.timeout(15000);
+    await sleep(11000); // JWT timeToLiveInSeconds = 10
     const res = await api.get<Record<string, unknown>>('refresh', {
       headers: {
         Cookie: `${APP_ACCESS_TOKEN_COOKIE}=${accessToken}; ${APP_REFRESH_TOKEN_COOKIE}=${refreshToken}`
@@ -850,7 +850,7 @@ describe('express-jwt-fusionauth', function () {
   });
 
   it('supports one-time use refresh tokens', async function () {
-    this.timeout(15000);
+    this.timeout(30000);
 
     const code = await getAuthorizationCode({
       client_id: ONE_TIME_REFRESH_APPLICATION_ID,
@@ -867,7 +867,7 @@ describe('express-jwt-fusionauth', function () {
     const accessToken = res.body.access_token;
     const refreshToken = res.body.refresh_token;
 
-    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    await sleep(11000); // JWT timeToLiveInSeconds = 10
 
     res = await api.get<Record<string, unknown>>('authed-one-time-refresh', {
       headers: {
@@ -891,7 +891,7 @@ describe('express-jwt-fusionauth', function () {
     const accessToken2 = accessTokenCookie.value;
     const refreshToken2 = refreshTokenCookie.value;
 
-    await sleep(6000); // JWT timeToLiveInSeconds = 5
+    await sleep(11000); // JWT timeToLiveInSeconds = 10
 
     try {
       res = await api.get<Record<string, unknown>>('authed-one-time-refresh', {

@@ -37,7 +37,7 @@
             "enabled": true,
             "refreshTokenTimeToLiveInMinutes": 43200,
             "refreshTokenUsagePolicy": "Reusable",
-            "timeToLiveInSeconds": 5
+            "timeToLiveInSeconds": 10
           },
           "loginConfiguration": {
             "allowTokenRefresh": true
@@ -72,7 +72,7 @@
             "enabled": true,
             "refreshTokenTimeToLiveInMinutes": 43200,
             "refreshTokenUsagePolicy": "OneTimeUse",
-            "timeToLiveInSeconds": 5
+            "timeToLiveInSeconds": 10
           },
           "loginConfiguration": {
             "allowTokenRefresh": true
