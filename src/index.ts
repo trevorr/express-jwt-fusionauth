@@ -211,13 +211,21 @@ export interface OAuthErrorResponse {
 }
 
 interface RefreshResponse {
+  /** The encoded access token. */
   token: string;
+  /** The refresh token. */
   refreshToken: string;
+  /**
+   * Persistent identifier for this refresh token, which will not change even when using one-time use refresh tokens.
+   * Available since FusionAuth 1.37.0.
+   */
+  refreshTokenId?: string;
 }
 
 interface RefreshResponseWithExpiration extends RefreshResponse {
-  token: string;
-  refreshToken: string;
+  /**
+   * Expiration date for the refresh token (obtained from the `refresh_token` cookie).
+   */
   refreshTokenExpires?: Date;
 }
 
@@ -503,6 +511,8 @@ export class ExpressJwtFusionAuth {
       /* istanbul ignore next */
       if (refreshTokenCookie?.expires) {
         body.refreshTokenExpires = refreshTokenCookie.expires;
+      } else if (refreshTokenCookie?.maxAge) {
+        body.refreshTokenExpires = new Date(Date.now() + refreshTokenCookie.maxAge * 1000);
       }
 
       return body;
