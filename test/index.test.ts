@@ -10,6 +10,8 @@ const {
   APP_COOKIE_DOMAIN,
   APP_ACCESS_TOKEN_COOKIE = 'the_access_token',
   APP_REFRESH_TOKEN_COOKIE = 'the_refresh_token',
+  APP_ACCESS_TOKEN_QUERY = 'q_access_token',
+  APP_REFRESH_TOKEN_QUERY = 'q_refresh_token',
   APP_JWT_ISSUER,
   APP_URL,
   FUSIONAUTH_ADMIN_EMAIL,
@@ -320,7 +322,7 @@ describe('express-jwt-fusionauth', function () {
     expect(Object.keys(cookies)).to.have.length(0);
     const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
   });
 
   it('oauth completion redirects to state with additional query parameters', async function () {
@@ -337,7 +339,7 @@ describe('express-jwt-fusionauth', function () {
     expect(Object.keys(cookies)).to.have.length(0);
     const match = /\/my-redirect\?q=x&([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
   });
 
   it('oauth completion redirects to state with query parameters using token_transport override', async function () {
@@ -354,7 +356,7 @@ describe('express-jwt-fusionauth', function () {
     expect(Object.keys(cookies)).to.have.length(0);
     const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
   });
 
   it('oauth completion redirects to state with query parameters if cookies are disabled', async function () {
@@ -371,7 +373,7 @@ describe('express-jwt-fusionauth', function () {
     expect(Object.keys(cookies)).to.have.length(0);
     const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
   });
 
   it('oauth completion returns refresh token', async function () {
@@ -431,8 +433,8 @@ describe('express-jwt-fusionauth', function () {
     expect(Object.keys(cookies)).to.have.length(0);
     const match = /\/my-redirect\?([^=]+)=[\w.-]+&([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
-    expect(match?.[2]).to.equal(APP_REFRESH_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
+    expect(match?.[2]).to.equal(APP_REFRESH_TOKEN_QUERY);
   });
 
   it('oauth completion redirects to state with access token query parameter and refresh token cookie', async function () {
@@ -452,7 +454,7 @@ describe('express-jwt-fusionauth', function () {
     expect(refreshTokenCookie).not.to.be.undefined;
     const match = /\/my-redirect\?([^=]+)=[\w.-]+/.exec(res.headers.location ?? '');
     expect(match).to.not.be.null;
-    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_COOKIE);
+    expect(match?.[1]).to.equal(APP_ACCESS_TOKEN_QUERY);
   });
 
   it('oauth completion supports application JWT', async function () {

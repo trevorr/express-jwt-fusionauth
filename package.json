@@ -1,6 +1,6 @@
 {
   "name": "express-jwt-fusionauth",
-  "version": "5.0.1",
+  "version": "6.0.0",
   "description": "Express middleware for JWT-based authentication against FusionAuth",
   "keywords": [
     "express",

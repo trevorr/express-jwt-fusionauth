@@ -9,6 +9,8 @@ const {
   APP_COOKIE_DOMAIN,
   APP_ACCESS_TOKEN_COOKIE = 'the_access_token',
   APP_REFRESH_TOKEN_COOKIE = 'the_refresh_token',
+  APP_ACCESS_TOKEN_QUERY = 'q_access_token',
+  APP_REFRESH_TOKEN_QUERY = 'q_refresh_token',
   APP_JWT_ISSUER,
   FUSIONAUTH_TENANT_ISSUER,
   PORT = '3000'
@@ -33,7 +35,9 @@ const oauthConfig: OAuthConfig = {
   refreshTokenCookieConfig: {
     name: APP_REFRESH_TOKEN_COOKIE,
     maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days in milliseconds
-  }
+  },
+  accessTokenQueryParam: APP_ACCESS_TOKEN_QUERY,
+  refreshTokenQueryParam: APP_REFRESH_TOKEN_QUERY
 };
 
 const jwtOptions: JwtOptions = {
@@ -62,7 +66,9 @@ const oauthConfigOneTimeRefresh: OAuthConfig = {
   },
   refreshTokenCookieConfig: {
     name: APP_REFRESH_TOKEN_COOKIE
-  }
+  },
+  accessTokenQueryParam: APP_ACCESS_TOKEN_QUERY,
+  refreshTokenQueryParam: APP_REFRESH_TOKEN_QUERY
 };
 
 const jwtOptionsOneTimeRefresh: JwtOptions = {

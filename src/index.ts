@@ -130,6 +130,10 @@ export interface OAuthConfig {
   accessTokenCookieConfig?: NamedCookieConfig;
   /** Cookie configuration used for setting the refresh token cookie after OAuth completion. */
   refreshTokenCookieConfig?: NamedCookieConfig;
+  /** Query parameter used for setting the access token cookie after OAuth completion. Defaults to "access_token". */
+  accessTokenQueryParam?: string;
+  /** Query parameter used for setting the refresh token cookie after OAuth completion. Defaults to "refresh_token". */
+  refreshTokenQueryParam?: string;
   /** JWT transform function allowing an application to replace the FusionAuth JWT with its own after OAuth completion. */
   jwtTransform?: JwtTransform;
   /** Log message output interface. */
@@ -563,6 +567,8 @@ export class ExpressJwtFusionAuth {
    */
   public oauthCompletion(config: OAuthConfig): express.RequestHandler {
     /* istanbul ignore next */
+    const { accessTokenQueryParam = 'access_token', refreshTokenQueryParam = 'refresh_token' } = config;
+    /* istanbul ignore next */
     const accessTokenCookieConfig = {
       ...defaultAccessTokenCookieConfig,
       ...config.cookieConfig,
@@ -674,7 +680,7 @@ export class ExpressJwtFusionAuth {
               res.cookie(accessTokenCookieName, data.access_token, accessTokenCookieConfig);
               break;
             case 'query':
-              stateParams.set(accessTokenCookieName, data.access_token);
+              stateParams.set(accessTokenQueryParam, data.access_token);
               paramsChanged = true;
               break;
           }
@@ -684,7 +690,7 @@ export class ExpressJwtFusionAuth {
                 res.cookie(refreshTokenCookieName, data.refresh_token, refreshTokenCookieConfig);
                 break;
               case 'query':
-                stateParams.set(refreshTokenCookieName, data.refresh_token);
+                stateParams.set(refreshTokenQueryParam, data.refresh_token);
                 paramsChanged = true;
                 break;
             }
