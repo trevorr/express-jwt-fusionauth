@@ -1,25 +1,31 @@
+type LogFn = {
+  (message: string, obj?: object): void;
+};
+
 /** Generic log message output interface. */
 export interface Logger {
   /** Log a message at verbose level. */
-  verbose(message: string): void;
+  verbose: LogFn;
   /** Log a message at debug level. */
-  debug(message: string): void;
+  debug: LogFn;
   /** Log a message at informational level. */
-  info(message: string): void;
+  info: LogFn;
   /** Log a message at warning level. */
-  warn(message: string): void;
+  warn: LogFn;
   /** Log a message at error level. */
-  error(message: string): void;
+  error: LogFn;
 }
 
 /** @ignore */
 const namespace = 'express-jwt-fusionauth';
 
 /** @ignore */
-const getConsoleLogger = (level: string) => (message: string) => {
-  // eslint-disable-next-line no-console
-  console.log(level, namespace, message);
-};
+const getConsoleLogger =
+  (level: string): LogFn =>
+  (message: string, ...args: unknown[]) => {
+    // eslint-disable-next-line no-console
+    console.log(level, namespace, message, ...args);
+  };
 
 /** @ignore */
 const consoleLogger: Logger = {

@@ -295,6 +295,7 @@ export class ExpressJwtFusionAuth {
     const { name: refreshTokenCookieName, disabled: refreshTokenCookieDisabled } = refreshTokenCookieConfig;
     return async (req: express.Request, res: express.Response, next: express.NextFunction): Promise<void> => {
       const { logger = getDefaultLogger() } = options;
+      const logContext = getLogContext(req);
 
       let token: string | undefined;
       let tokenSource: string | undefined;
@@ -354,7 +355,7 @@ export class ExpressJwtFusionAuth {
               // refresh expired JWT automatically if we have a refresh token from a header, or from a cookie
               // and the HTTP method is safe (to avoid CSRF), and we have a way to return the new tokens
               if (!refreshTokenFromHeader && !isSafeMethod(req.method)) {
-                logger.debug(`Cannot auto-refresh from cookie with unsafe method ${req.method}`);
+                logger.debug(`Cannot auto-refresh from cookie with unsafe method ${req.method}`, logContext);
                 throw err;
               }
 
@@ -364,15 +365,15 @@ export class ExpressJwtFusionAuth {
                 (!refreshedAccessTokenHeader && accessTokenCookieDisabled) ||
                 (!refreshedRefreshTokenHeader && refreshTokenCookieDisabled)
               ) {
-                logger.debug('Cannot auto-refresh without cookie or header to return new tokens');
+                logger.debug('Cannot auto-refresh without cookie or header to return new tokens', logContext);
                 throw err;
               }
 
               let refreshResponse;
               try {
-                refreshResponse = await this.postRefresh(logger, refreshToken, token);
+                refreshResponse = await this.postRefresh(logger, logContext, refreshToken, token);
               } catch (refreshErr) {
-                logger.debug(`Failed to auto-refresh: ${asError(refreshErr).message}`);
+                logger.debug(`Failed to auto-refresh: ${asError(refreshErr).message}`, logContext);
                 // rethrow original error if refresh fails
                 throw err;
               }
@@ -419,21 +420,21 @@ export class ExpressJwtFusionAuth {
               }
             }
             req.jwt = payload;
-            logger.debug(`Found valid JWT using ${tokenSource} for ${payload.sub}`);
+            logger.debug(`Found valid JWT using ${tokenSource} for ${payload.sub}`, logContext);
             return next();
           } catch (err) {
-            logger.debug(`Invalid JWT provided by ${tokenSource}: ${asError(err).message}`);
+            logger.debug(`Invalid JWT provided by ${tokenSource}: ${asError(err).message}`, logContext);
           }
         } catch (err) {
           /* istanbul ignore next */
-          logger.error(`Error fetching keys to verify JWT: ${asError(err).message}`);
+          logger.error(`Error fetching keys to verify JWT: ${asError(err).message}`, logContext);
         }
       } else {
         let message = 'No JWT provided in Authorization header';
         if (!accessTokenCookieDisabled) {
           message += ` or ${accessTokenCookieName} cookie`;
         }
-        logger.debug(message);
+        logger.debug(message, logContext);
       }
       if (effectiveOptions.required || !!token) {
         if (
@@ -448,15 +449,15 @@ export class ExpressJwtFusionAuth {
             state: req.originalUrl
           };
           const url = `${this.fusionAuthUrl}/oauth2/authorize?${qs.stringify(params)}`;
-          logger.debug(`Redirecting to OAuth login: ${url}`);
+          logger.debug(`Redirecting to OAuth login: ${url}`, logContext);
           res.redirect(url);
         } else {
-          logger.debug('Failing unauthenticated request');
+          logger.debug('Failing unauthenticated request', logContext);
           res.setHeader('WWW-Authenticate', 'Bearer');
           res.status(401).send('Authorization required');
         }
       } else {
-        logger.verbose('Proceeding with unauthenticated request');
+        logger.verbose('Proceeding with unauthenticated request', logContext);
         next();
       }
     };
@@ -480,7 +481,9 @@ export class ExpressJwtFusionAuth {
   ): Promise<RefreshJwtResult> {
     const options = context?.options;
     const logger = options?.logger ?? getDefaultLogger();
-    const refresh = await this.postRefresh(logger, refreshToken, oldToken);
+    /* istanbul ignore else */
+    const logContext = context?.request ? getLogContext(context.request) : {};
+    const refresh = await this.postRefresh(logger, logContext, refreshToken, oldToken);
     const { token } = refresh;
     const payload = this.decodeTrustedJwt(token);
     const result = { ...refresh, payload };
@@ -499,6 +502,7 @@ export class ExpressJwtFusionAuth {
 
   private async postRefresh(
     logger: Logger,
+    logContext: object,
     refreshToken: string,
     token?: string
   ): Promise<RefreshResponseWithExpiration> {
@@ -529,7 +533,7 @@ export class ExpressJwtFusionAuth {
       } else {
         ({ message } = asError(err));
       }
-      logger.debug(`Failed to refresh token: ${message}`);
+      logger.debug(`Failed to refresh token: ${message}`, logContext);
       throw err;
     }
   }
@@ -555,7 +559,7 @@ export class ExpressJwtFusionAuth {
           return;
         }
       }
-      logger.debug(`Failing request without JWT role(s): ${requiredRoles.join(', ')}`);
+      logger.debug(`Failing request without JWT role(s): ${requiredRoles.join(', ')}`, getLogContext(req));
       res.status(403).send('Not authorized');
     };
   }
@@ -584,6 +588,7 @@ export class ExpressJwtFusionAuth {
     const { name: refreshTokenCookieName, disabled: refreshTokenCookieDisabled } = refreshTokenCookieConfig;
     return async (req: express.Request, res: express.Response): Promise<void> => {
       const { logger = getDefaultLogger() } = config;
+      const logContext = getLogContext(req);
 
       let code, state;
       if (req.method === 'GET') {
@@ -640,7 +645,7 @@ export class ExpressJwtFusionAuth {
         }
       }
 
-      logger.verbose(`Exchanging OAuth code "${code}" for token`);
+      logger.verbose(`Exchanging OAuth code "${code}" for token`, logContext);
 
       try {
         const tokenRes = await this.fusionAuth.post<OAuthTokenResponse>('oauth2/token', {
@@ -706,17 +711,18 @@ export class ExpressJwtFusionAuth {
         }
 
         logger.verbose(
-          `Completed OAuth with ${jwtSource} JWT${data.refresh_token ? ' and refresh token' : ''} via ${jwtVia}`
+          `Completed OAuth with ${jwtSource} JWT${data.refresh_token ? ' and refresh token' : ''} via ${jwtVia}`,
+          logContext
         );
       } catch (err) {
         if (err instanceof HTTPError && err.response && isOAuthErrorResponse(err.response.body)) {
           /* istanbul ignore next */
           const { error = 'unknown_error', error_description } = err.response.body;
           const message = error_description || /* istanbul ignore next */ error;
-          logger.debug(`Failed to exchange authorization code for token: ${message}`);
+          logger.debug(`Failed to exchange authorization code for token: ${message}`, logContext);
           this.oauthError(res, error, error_description, err.response.statusCode);
         } else {
-          logger.debug(`Failed to exchange authorization code for token: ${asError(err).message}`);
+          logger.debug(`Failed to exchange authorization code for token: ${asError(err).message}`, logContext);
           this.oauthError(res, 'internal_error', 'Failed to exchange authorization code for token', 500);
         }
       }
@@ -751,4 +757,9 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 function isSafeMethod(s: string): boolean {
   return ['GET', 'HEAD', 'OPTIONS'].includes(s);
+}
+
+function getLogContext(req: express.Request): object {
+  const { ip, method, url } = req;
+  return { ip, method, url };
 }

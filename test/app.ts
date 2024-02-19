@@ -105,7 +105,8 @@ const jwtVerifier: JwtVerifier = async token => {
   return jwt.payload as JwtClaims;
 };
 
-const appJwtOptions = { ...jwtOptions, jwtTransform, jwtVerifier, logger: getDefaultLogger() };
+const logger = getDefaultLogger();
+const appJwtOptions = { ...jwtOptions, jwtTransform, jwtVerifier, logger };
 
 const auth = new ExpressJwtFusionAuth(requiredEnv('FUSIONAUTH_URL'));
 const app = express();
@@ -188,7 +189,7 @@ app.post('/refresh-app-jwt', express.json(), async (req: express.Request, res) =
     const authorization = req.header('authorization');
     const token = authorization?.startsWith('Bearer ') ? authorization.substring(7) : undefined;
     const { refreshToken } = req.body;
-    const result = await auth.refreshJwt(refreshToken, token, { options: appJwtOptions });
+    const result = await auth.refreshJwt(refreshToken, token, { options: appJwtOptions, request: req });
     res.json(result);
   } catch {
     res.sendStatus(400);
@@ -204,7 +205,6 @@ app.get('/opt-authed', auth.jwt({ ...jwtOptions, required: false }), (req: expre
 
 const port = parseInt(PORT);
 app.listen(port);
-// eslint-disable-next-line no-console
-console.log(`Listening on port ${port}`);
+logger.info(`Listening on port ${port}`);
 
 process.on('SIGINT', () => process.exit());
